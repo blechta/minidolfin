@@ -74,6 +74,26 @@ def build_dofmap(element, mesh):
     return DofMap(cell_dofs=cell_dofs, dim=offset, mesh=mesh, element=element)
 
 
+def build_sparsity_pattern(dofmap):
+
+    # Fetch data
+    tdim = dofmap.mesh.reference_cell.get_dimension()
+    num_cells = dofmap.mesh.num_entities(tdim)
+    cell_dofs = dofmap.cell_dofs
+
+    # Resulting data structure
+    pattern = [set() for i in range(dofmap.dim)]
+
+    # Build cell integral pattern
+    for c in range(num_cells):
+        dofs = cell_dofs[c]
+        for dof0 in dofs:
+            for dof1 in dofs:
+                pattern[dof0].add(dof1)
+
+    return pattern
+
+
 def assemble(dofmap, form):
     assembly_kernel = compile_form(form)
 

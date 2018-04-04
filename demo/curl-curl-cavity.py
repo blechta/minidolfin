@@ -3,7 +3,8 @@ import ufl
 import timeit
 
 from minidolfin.meshing import build_unit_cube_mesh
-from minidolfin.assembling import build_dofmap, assemble
+from minidolfin.assembling import build_dofmap, build_sparsity_pattern
+from minidolfin.assembling import assemble
 
 
 # UFL form
@@ -14,13 +15,16 @@ a = (ufl.inner(ufl.curl(u), ufl.curl(v)) - omega2*ufl.dot(u, v))*ufl.dx
 L = v[0]*ufl.dx
 
 # Build mesh
-mesh = build_unit_cube_mesh(32, 32, 32)
+mesh = build_unit_cube_mesh(16, 16, 16)
 tdim = mesh.reference_cell.get_dimension()
 print('Number cells: {}'.format(mesh.num_entities(tdim)))
 
 # Build dofmap
 dofmap = build_dofmap(element, mesh)
 print('Number dofs: {}'.format(dofmap.dim))
+
+# Build sparsity pattern
+pattern = build_sparsity_pattern(dofmap)
 
 # Run and time the assembly
 t = -timeit.default_timer()

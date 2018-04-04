@@ -1,7 +1,94 @@
+import FIAT
 import numpy
 import numba
 
-import collections
+
+class Mesh(object):
+
+    def __init__(self, reference_cell, vertices, cells):
+        tdim = reference_cell.get_dimension()
+
+        self.reference_cell = reference_cell
+        self.vertices = vertices
+        self.topology = {(tdim, 0): cells}
+
+        # TODO: Numbify me?
+        # TODO: Or rather do the actual sorting?
+        try:
+            for i in range(cells.shape[0]):
+                for j in range(cells.shape[1] - 1):
+                    assert cells[i, j+1] > cells[i, j]
+        except AssertionError:
+            raise ValueError("Cell-vertex topology is not sorted")
+
+        # FIXME: Compute only needed connectivity
+        for d in range(1, tdim):
+            self.topology[(tdim, d)], self.topology[(d, 0)] = \
+                    self._compute_connectivity_tdim_d_0(d)
+        self._compute_boundary_facets()
+
+
+    def get_connectivity(self, dim0, dim1):
+        if dim0 == dim1:
+            return range(self.num_entities(dim1))
+        else:
+            try:
+                return self.topology[(dim0, dim1)]
+            except KeyError:
+                raise ValueError("Connectivity {}-{} has not been computed".format(dim0, dim1))
+
+
+    def num_entities(self, dim):
+        if dim == 0:
+            return self.vertices.shape[0]
+        else:
+            return self.get_connectivity(dim, 0).shape[0]
+
+
+    def _compute_connectivity_tdim_d_0(self, d):
+        # Fetch data
+        tdim = self.reference_cell.get_dimension()
+        cell_vertex_connectivity = self.topology[(tdim, 0)]
+        ent_vert_conn_local = self.reference_cell.get_connectivity()[(d, 0)]
+        ent_per_cell = len(ent_vert_conn_local)
+        vertices_per_ent = len(ent_vert_conn_local[0])
+        num_cells = self.num_entities(tdim)
+
+        # Compute ent-vertex connectivity cell-by-cell
+        ent_vert_conn = cell_vertex_connectivity[:, ent_vert_conn_local].reshape(ent_per_cell*num_cells, vertices_per_ent)
+
+        # Gather cells togeter, pick unique, that gives ent-numbering
+        tmp = {}
+        for ent_ind, ent_verts in enumerate(ent_vert_conn):
+            tmp.setdefault(tuple(ent_verts), []).append(ent_ind)
+        cell_ent_conn = numpy.ndarray((ent_vert_conn.shape[0],), dtype=ent_vert_conn.dtype)
+        ent_vert_conn = numpy.ndarray((len(tmp), ent_vert_conn.shape[1]), dtype=ent_vert_conn.dtype)
+        cnt = 0
+        for ent_verts, ent_inds in tmp.items():
+            ent_vert_conn[cnt] = ent_verts
+            cell_ent_conn[ent_inds] = cnt
+            cnt += 1
+        del tmp
+        # NB: With NumPy >= 1.13 just maybe:
+        #ent_vert_conn, cell_ent_conn = numpy.unique(ent_vert_conn, axis=0, return_inverse=True)
+
+        # Adapt data into desired shape
+        cell_ent_conn = cell_ent_conn.reshape(num_cells, ent_per_cell)
+
+        return cell_ent_conn, ent_vert_conn
+
+
+    def _compute_boundary_facets(self):
+        # Fetch data
+        tdim = self.reference_cell.get_dimension()
+        num_facets = self.num_entities(tdim-1);
+        cell_facet_connectivity = self.get_connectivity(tdim, tdim-1)
+
+        # Determine boundary facets by counting the number of cells
+        # they apper in (1 = boundary, 2 = interior)
+        counts = numpy.bincount(cell_facet_connectivity.flat)
+        self.boundary_facets = set(f for f, count in enumerate(counts) if count==1)
+
 
 
 def build_unit_cube_mesh(nx, ny, nz):
@@ -28,12 +115,13 @@ def build_unit_cube_mesh(nx, ny, nz):
 
                     c0 = 6*(iz*nx*ny + iy*nx + ix)
                     cells[c0+0,:] = [v0, v1, v3, v7]
-                    cells[c0+1,:] = [v0, v1, v7, v5]
-                    cells[c0+2,:] = [v0, v5, v7, v4]
-                    cells[c0+3,:] = [v0, v3, v2, v7]
-                    cells[c0+4,:] = [v0, v6, v4, v7]
+                    cells[c0+1,:] = [v0, v1, v5, v7]
+                    cells[c0+2,:] = [v0, v4, v5, v7]
+                    cells[c0+3,:] = [v0, v2, v3, v7]
+                    cells[c0+4,:] = [v0, v4, v6, v7]
                     cells[c0+5,:] = [v0, v2, v6, v7]
     build_topology(nx, ny, nz, cells)
 
-    Mesh = collections.namedtuple("Mesh", "vertices cells")
-    return Mesh(vertices=vertices, cells=cells)
+    fiat_cell = FIAT.reference_element.ufc_cell("tetrahedron")
+
+    return Mesh(fiat_cell, vertices, cells)

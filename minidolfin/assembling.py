@@ -1,13 +1,13 @@
-import ufl
 import tsfc
 import dijitso
 from coffee.plan import ASTKernel
 import numpy
 import numba
+from petsc4py import PETSc
+from cffi import FFI
 
 import ctypes
 import hashlib
-import collections
 
 
 def compile_form(a):
@@ -42,62 +42,10 @@ def compile_form(a):
     return func
 
 
-# Data structure representing dofmap
-DofMap = collections.namedtuple("DofMap", "cell_dofs dim mesh element")
-
-
-def build_dofmap(element, mesh):
-    fiat_element = tsfc.fiatinterface.create_element(element)
-
-    assert mesh.reference_cell == fiat_element.get_reference_element()
-    tdim = mesh.reference_cell.get_dimension()
-
-    # Build cell dofs - mapping of cells to global dofs.
-    # cell_dofs(i, j) is global dof number for cell i and local dof
-    # index j.
-    cell_dofs = numpy.ndarray((mesh.num_entities(tdim),
-                               fiat_element.space_dimension()),
-                              dtype=numpy.uint32)
-    offset = 0
-
-    for dim, local_dofs in fiat_element.entity_dofs().items():
-        dofs_per_entity = len(local_dofs[0])
-        connectivity = mesh.get_connectivity(tdim, dim)
-
-        for k in range(dofs_per_entity):
-            entity_dofs = [dofs[k] for entity, dofs in sorted(local_dofs.items())]
-            cell_dofs[:, entity_dofs] = dofs_per_entity*connectivity + (offset+k)
-
-        offset += dofs_per_entity*mesh.num_entities(dim)
-
-    # Build dofmap structure and store what it depends on
-    return DofMap(cell_dofs=cell_dofs, dim=offset, mesh=mesh, element=element)
-
-
-def build_sparsity_pattern(dofmap):
-
-    # Fetch data
-    tdim = dofmap.mesh.reference_cell.get_dimension()
-    num_cells = dofmap.mesh.num_entities(tdim)
-    cell_dofs = dofmap.cell_dofs
-
-    # Resulting data structure
-    pattern = [set() for i in range(dofmap.dim)]
-
-    # Build cell integral pattern
-    for c in range(num_cells):
-        dofs = cell_dofs[c]
-        for dof0 in dofs:
-            for dof1 in dofs:
-                pattern[dof0].add(dof1)
-
-    return pattern
-
-
-def assemble(dofmap, form):
+def assemble(petsc_tensor, dofmap, form):
     assembly_kernel = compile_form(form)
 
-    elements = tuple(arg.ufl_element() for arg in  form.arguments())
+    elements = tuple(arg.ufl_element() for arg in form.arguments())
     fiat_elements = map(tsfc.fiatinterface.create_element, elements)
 
     element_dims = tuple(fe.space_dimension() for fe in fiat_elements)
@@ -106,6 +54,7 @@ def assemble(dofmap, form):
     tdim = dofmap.mesh.reference_cell.get_dimension()
     cells = dofmap.mesh.get_connectivity(tdim, 0)
     vertices = dofmap.mesh.vertices
+    cell_dofs = dofmap.cell_dofs
 
     num_vertices_per_cell = cells.shape[1]
     coords_addr = numpy.ndarray(num_vertices_per_cell, dtype=numpy.uintp)
@@ -114,8 +63,31 @@ def assemble(dofmap, form):
     gdim = vertices.shape[1]
     coord_offset = gdim*sizeof_double
 
-    @numba.jit(nopython=True)
-    def _assemble(cells, vertices, assembly_kernel, coords_addr, A, coord_offset):
+    ffi = FFI()
+    ffi.cdef("""\
+typedef enum {NOT_SET_VALUES, INSERT_VALUES, ADD_VALUES, MAX_VALUES, INSERT_ALL_VALUES, ADD_ALL_VALUES, INSERT_BC_VALUES, ADD_BC_VALUES} InsertMode;
+int MatSetValues(void* mat,int m,const int idxm[],int n,const int idxn[],const double v[],int addv);
+    """)
+    petsc = ffi.dlopen("petsc")
+    msv = petsc.MatSetValues
+    #addv = PETSc.InsertMode.ADD_VALUES
+    addv = petsc.ADD_VALUES
+    petsc_tensor_handle = petsc_tensor.handle
+
+    petsc_tensor_ = ffi.cast('char*', petsc_tensor_handle)
+    A_ = ffi.cast('char*', A.ctypes.data)
+    nrows = ncols = cells.shape[0]
+
+
+    #ti = numpy.ctypeslib.ndpointer(dtype=PETSc.IntType, ndim=1, flags='C_CONTIGUOUS')
+    #tv = numpy.ctypeslib.ndpointer(dtype=PETSc.ScalarType, ndim=1, flags='C_CONTIGUOUS')
+    #ti = numpy.ctypeslib.ndpointer()
+    #tv = numpy.ctypeslib.ndpointer()
+    #setv = ctypes.CFUNCTYPE(None, ti, ti, tv)(setv)
+
+    #@numba.jit(nopython=True)
+    @numba.jit
+    def _assemble(cells, vertices, assembly_kernel, coords_addr, A, coord_offset, cell_dofs):
         vertices_addr = vertices.ctypes.data
         coords_ptr = coords_addr.ctypes.data
         A_ptr = A.ctypes.data
@@ -125,4 +97,10 @@ def assemble(dofmap, form):
             A[:] = 0
             assembly_kernel(A_ptr, coords_ptr)
 
-    _assemble(cells, vertices, assembly_kernel, coords_addr, A, coord_offset)
+            rows = cols = ffi.cast('void*', cell_dofs[i].ctypes.data)
+            ierr = msv(petsc_tensor_, nrows, rows, ncols, cols, A_, addv)
+            #msv(petsc_tensor_handle, nrows, cell_dofs[i].ctypes.data, ncols, cell_dofs[i].ctypes.data, A.ctypes.data, addv)
+
+    _assemble(cells, vertices, assembly_kernel, coords_addr, A, coord_offset, cell_dofs)
+
+    petsc_tensor.assemble()

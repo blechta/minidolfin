@@ -9,16 +9,18 @@ from minidolfin.dofmap import pattern_to_csr
 from minidolfin.petsc import create_matrix_from_csr
 from minidolfin.assembling import assemble
 
+import dijitso
+dijitso.set_log_level("debug")
+
 
 # UFL form
 element = ufl.FiniteElement("N1E", ufl.tetrahedron, 2)
 u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
 omega2 = 1e3
 a = (ufl.inner(ufl.curl(u), ufl.curl(v)) - omega2*ufl.dot(u, v))*ufl.dx
-L = v[0]*ufl.dx
 
 # Build mesh
-mesh = build_unit_cube_mesh(4, 4, 4)
+mesh = build_unit_cube_mesh(1, 1, 1)
 tdim = mesh.reference_cell.get_dimension()
 print('Number cells: {}'.format(mesh.num_entities(tdim)))
 
@@ -37,7 +39,4 @@ assemble(A, dofmap, a)
 t += timeit.default_timer()
 print('Assembly time a: {}'.format(t))
 
-t = -timeit.default_timer()
-assemble(A, dofmap, L)
-t += timeit.default_timer()
-print('Assembly time L: {}'.format(t))
+#A.view()

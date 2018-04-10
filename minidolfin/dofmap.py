@@ -19,13 +19,14 @@ def build_dofmap(element, mesh):
     # index j.
     cell_dofs = numpy.ndarray((mesh.num_entities(tdim),
                                fiat_element.space_dimension()),
-                              dtype=numpy.uint32)
+                              dtype=numpy.int32)
     offset = 0
 
     for dim, local_dofs in fiat_element.entity_dofs().items():
         dofs_per_entity = len(local_dofs[0])
         connectivity = mesh.get_connectivity(tdim, dim)
 
+        # FIXME: Dofs on single entity are not consecutive?
         for k in range(dofs_per_entity):
             entity_dofs = [dofs[k] for entity, dofs in sorted(local_dofs.items())]
             cell_dofs[:, entity_dofs] = dofs_per_entity*connectivity + (offset+k)
@@ -76,3 +77,29 @@ def pattern_to_csr(pattern, dtype=numpy.int32):
     i[nrows] = offset
 
     return i, j
+
+
+def interpolate_vertex_values(dofmap, x):
+
+    # Fetch data from mesh
+    tdim = dofmap.mesh.reference_cell.get_dimension()
+    num_cells = dofmap.mesh.num_entities(tdim)
+    num_vertices = dofmap.mesh.num_entities(0)
+
+    # Fetch data from dofmap
+    cell_dofs = dofmap.cell_dofs
+    cell_vertex_conn = dofmap.mesh.get_connectivity(tdim, 0)
+
+    # Build local vertex-dof connectivity
+    fiat_element = tsfc.fiatinterface.create_element(dofmap.element)
+    vertex_dofs = fiat_element.entity_dofs()[0]
+    dofs_per_vertex = len(vertex_dofs[0])
+    assert dofs_per_vertex == 1, "just have to agree on ordering"
+    k = 0
+    vertex_dofs = [dofs[k] for entity, dofs in sorted(vertex_dofs.items())]
+
+    # Build vertex values
+    vertex_values = numpy.ndarray((num_vertices,), dtype=numpy.double)
+    vertex_values[cell_vertex_conn[:]] = x[cell_dofs[:, vertex_dofs]]
+
+    return vertex_values

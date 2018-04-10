@@ -18,11 +18,21 @@ def build_dirichlet_dofs(dofmap, value):
     fiat_element = tsfc.fiatinterface.create_element(dofmap.element)
     mapping, = set(fiat_element.mapping())
     if mapping == "affine":
-        # FIXME: This probably does not match FIAT cell!
-        f_hat = lambda B, b: lambda xhat: value(B.dot(xhat) + b)
+        def f_hat(B, b):
+            def _f_hat(xhat):
+                return value(B.dot(xhat) + b)
+            return _f_hat
     elif mapping == "covariant piola":
-        # FIXME: This probably does not match FIAT cell!
-        f_hat = lambda B, b: lambda xhat: value(B.dot(xhat) + b).dot(B)
+        def f_hat(B, b):
+            def _f_hat(xhat):
+                return value(B.dot(xhat) + b).dot(B)
+            return _f_hat
+    elif mapping == "contravariant piola":
+        def f_hat(B, b):
+            Binv = numpy.linalg.inv(B)
+            def _f_hat(xhat):
+                return Binv.dot(value(B.dot(xhat) + b))
+            return _f_hat
     else:
         raise NotImplementedError
 
@@ -38,8 +48,10 @@ def build_dirichlet_dofs(dofmap, value):
 
         if any(is_boundary):
 
-            b = vertices[cell_vertex_conn[c, tdim]]
-            B = vertices[cell_vertex_conn[c, 0:tdim]] - b.reshape(b.shape+(1,))
+            # NB: This is affine transformation resulting from UFC
+            #     simplex definition in FIAT
+            b = vertices[cell_vertex_conn[c, 0 ]]
+            B = vertices[cell_vertex_conn[c, 1:]] - b.reshape(b.shape+(1,))
 
             dof_vals = interpolation_operator(f_hat(B, b))
             dof_indices = cell_dofs[c]
@@ -50,7 +62,7 @@ def build_dirichlet_dofs(dofmap, value):
             for d in local_boundary_dofs:
                 bc_map[dof_indices[d]] = dof_vals[d]
 
-    dofs = numpy.fromiter(bc_map.keys(), cell_dofs.dtype, count=len(bc_map))
+    dofs = numpy.fromiter(bc_map.keys(), numpy.int32, count=len(bc_map))
     vals = numpy.fromiter(bc_map.values(), numpy.double, count=len(bc_map))
 
     return dofs, vals

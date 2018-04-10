@@ -125,3 +125,30 @@ def build_unit_cube_mesh(nx, ny, nz):
     fiat_cell = FIAT.reference_element.ufc_cell("tetrahedron")
 
     return Mesh(fiat_cell, vertices, cells)
+
+
+
+def build_unit_square_mesh(nx, ny):
+    x = numpy.linspace(0, 1, nx + 1)
+    y = numpy.linspace(0, 1, ny + 1)
+    c = numpy.meshgrid(x, y, copy=False, indexing='ij')
+    vertices = numpy.transpose(c).reshape((nx + 1)*(ny + 1), 2)
+
+    cells = numpy.ndarray((2*nx*ny, 3), dtype=numpy.uintc)
+    @numba.jit(nopython=True)
+    def build_topology(nx, ny, cells):
+        for iy in range(ny):
+            for ix in range(nx):
+                v0 = iy*(nx + 1) + ix
+                v1 = v0 + 1
+                v2 = v0 + (nx + 1)
+                v3 = v1 + (nx + 1)
+
+                c0 = 2*(iy*nx + ix)
+                cells[c0+0,:] = [v0, v1, v2]
+                cells[c0+1,:] = [v1, v2, v3]
+    build_topology(nx, ny, cells)
+
+    fiat_cell = FIAT.reference_element.ufc_cell("triangle")
+
+    return Mesh(fiat_cell, vertices, cells)

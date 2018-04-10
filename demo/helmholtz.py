@@ -26,7 +26,7 @@ u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
 a = (ufl.inner(ufl.grad(u), ufl.grad(v)) - omega2*ufl.dot(u, v))*ufl.dx
 
 # Build mesh
-mesh = build_unit_square_mesh(128, 128)
+mesh = build_unit_square_mesh(256, 256)
 tdim = mesh.reference_cell.get_dimension()
 print('Number cells: {}'.format(mesh.num_entities(tdim)))
 
@@ -39,7 +39,7 @@ pattern = build_sparsity_pattern(dofmap)
 i, j = pattern_to_csr(pattern)
 A = create_matrix_from_csr((i, j))
 
-# Run and time the assembly
+# Run and time assembly
 t = -timeit.default_timer()
 assemble(A, dofmap, a)
 t += timeit.default_timer()
@@ -51,18 +51,21 @@ bc_dofs, bc_vals = build_dirichlet_dofs(dofmap, u_exact)
 x.setValues(bc_dofs, bc_vals)
 A.zeroRowsColumns(bc_dofs, diag=1, x=x, b=b)
 
-# Solver linear system
+# Solve linear system
 ksp = PETSc.KSP().create(A.comm)
 ksp.setType(PETSc.KSP.Type.PREONLY)
 ksp.pc.setType(PETSc.PC.Type.CHOLESKY)
 set_solver_package(ksp.pc, "mumps")
 #A.setOption(PETSc.Mat.Option.SPD, True)  # FIXME: Is that true?
+t = -timeit.default_timer()
 ksp.setOperators(A)
 ksp.setUp()
+t += timeit.default_timer()
+print('Setup linear solver time: {}'.format(t))
 t = -timeit.default_timer()
 ksp.solve(b, x)
 t += timeit.default_timer()
-print('Solve linear system time a: {}'.format(t))
+print('Solve linear system time: {}'.format(t))
 
 # Plot solution
 vertex_values = interpolate_vertex_values(dofmap, x)

@@ -40,7 +40,7 @@ def build_dirichlet_dofs(dofmap, value):
     else:
         raise NotImplementedError
 
-    # Turn dual basis node into interpolation operator
+    # Turn dual basis nodes into interpolation operator
     dim = fiat_element.space_dimension()
     def interpolation_operator(f):
         return numpy.fromiter((phi(f) for phi in fiat_element.get_dual_set().get_nodes()),
@@ -77,6 +77,7 @@ def build_dirichlet_dofs(dofmap, value):
                 bc_map[dof_indices[d]] = dof_vals[d]
 
     # Convert to arrays
+    # FIXME: Is deterministic?
     dofs = numpy.fromiter(bc_map.keys(), numpy.int32, count=len(bc_map))
     vals = numpy.fromiter(bc_map.values(), numpy.double, count=len(bc_map))
 

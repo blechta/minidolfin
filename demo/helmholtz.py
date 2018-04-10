@@ -20,12 +20,12 @@ omega2 = 1.5**2 + 1**2
 u_exact = lambda x: math.cos(-1.5*x[0] + x[1])
 
 # UFL form
-element = ufl.FiniteElement("P", ufl.triangle, 1)
+element = ufl.FiniteElement("P", ufl.triangle, 3)
 u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
 a = (ufl.inner(ufl.grad(u), ufl.grad(v)) - omega2*ufl.dot(u, v))*ufl.dx
 
 # Build mesh
-mesh = build_unit_square_mesh(256, 256)
+mesh = build_unit_square_mesh(128, 128)
 tdim = mesh.reference_cell.get_dimension()
 print('Number cells: {}'.format(mesh.num_entities(tdim)))
 

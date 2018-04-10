@@ -30,7 +30,8 @@ class Mesh(object):
 
     def get_connectivity(self, dim0, dim1):
         if dim0 == dim1:
-            return range(self.num_entities(dim1))
+            num_entities = self.num_entities(dim1)
+            return numpy.arange(num_entities, dtype=numpy.uintc).reshape(num_entities, 1)
         else:
             try:
                 return self.topology[(dim0, dim1)]

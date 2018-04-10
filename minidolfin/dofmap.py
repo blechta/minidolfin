@@ -100,6 +100,6 @@ def interpolate_vertex_values(dofmap, x):
 
     # Build vertex values
     vertex_values = numpy.ndarray((num_vertices,), dtype=numpy.double)
-    vertex_values[cell_vertex_conn[:]] = x[cell_dofs[:, vertex_dofs]]
+    vertex_values[cell_vertex_conn[:]] = x[numpy.ascontiguousarray(cell_dofs[:, vertex_dofs])]
 
     return vertex_values

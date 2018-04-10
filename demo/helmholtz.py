@@ -20,13 +20,12 @@ omega2 = 1.5**2 + 1**2
 u_exact = lambda x: math.cos(-1.5*x[0] + x[1])
 
 # UFL form
-element = ufl.FiniteElement("P", ufl.triangle, 2)
+element = ufl.FiniteElement("P", ufl.triangle, 1)
 u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
-omega2 = 1e3
 a = (ufl.inner(ufl.grad(u), ufl.grad(v)) - omega2*ufl.dot(u, v))*ufl.dx
 
 # Build mesh
-mesh = build_unit_square_mesh(128, 128)
+mesh = build_unit_square_mesh(256, 256)
 tdim = mesh.reference_cell.get_dimension()
 print('Number cells: {}'.format(mesh.num_entities(tdim)))
 
@@ -56,7 +55,7 @@ ksp = PETSc.KSP().create(A.comm)
 ksp.setType(PETSc.KSP.Type.PREONLY)
 ksp.pc.setType(PETSc.PC.Type.CHOLESKY)
 ksp.pc.setFactorSolverPackage("mumps")
-A.setOption(PETSc.Mat.Option.SPD, True)
+#A.setOption(PETSc.Mat.Option.SPD, True)  # FIXME: Is that true?
 ksp.setOperators(A)
 ksp.setUp()
 t = -timeit.default_timer()
@@ -70,3 +69,21 @@ triang = tri.Triangulation(mesh.vertices[:, 0], mesh.vertices[:, 1],
                            mesh.get_connectivity(tdim, 0))
 pyplot.tripcolor(triang, vertex_values)
 pyplot.show()
+
+
+
+#import numpy
+#num_cells = mesh.num_entities(tdim)
+#for c in range(num_cells):
+#    cv = mesh.get_connectivity(tdim, 0)[c]
+#    for dof, vert in zip(dofmap.cell_dofs[c], cv):
+#        if dof in bc_dofs:
+#            i = numpy.argmax(bc_dofs == dof)
+#            print(dof, bc_dofs[i], bc_vals[i]-mesh.vertices[vert][0])
+#            ff = mesh.get_connectivity(tdim-1, 0) == vert
+#            #import pdb; pdb.set_trace()
+#            ff = numpy.where(ff)[0]
+#            try:
+#                assert any(f for f in ff if f in mesh.boundary_facets)
+#            except AssertionError:
+#                print("facets", ff, "cell", c, "dof", dof, "vert", vert)

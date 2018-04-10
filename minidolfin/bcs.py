@@ -3,20 +3,24 @@ import numpy
 
 
 def build_dirichlet_dofs(dofmap, value):
+
+    # Fetch mesh data
     tdim = dofmap.mesh.reference_cell.get_dimension()
     cell_vertex_conn = dofmap.mesh.get_connectivity(tdim, 0)
     cell_facet_conn = dofmap.mesh.get_connectivity(tdim, tdim-1)
-
     vertices = dofmap.mesh.vertices
-
-    cell_dofs = dofmap.cell_dofs
-
+    boundary_facets = dofmap.mesh.boundary_facets
     num_facets_per_cell = cell_facet_conn.shape[1]
 
-    bc_map = {}
+    # Fetch dofmap data
+    cell_dofs = dofmap.cell_dofs
 
+    # Fetch data from reference element
     fiat_element = tsfc.fiatinterface.create_element(dofmap.element)
+    facet_dofs = fiat_element.entity_closure_dofs()[tdim-1]
     mapping, = set(fiat_element.mapping())
+
+    # Define appropriate pull-back
     if mapping == "affine":
         def f_hat(B, b):
             def _f_hat(xhat):
@@ -36,28 +40,35 @@ def build_dirichlet_dofs(dofmap, value):
     else:
         raise NotImplementedError
 
-    facet_dofs = fiat_element.entity_closure_dofs()[tdim-1]
-
+    # Turn dual basis node into interpolation operator
+    dim = fiat_element.space_dimension()
     def interpolation_operator(f):
-        dim = fiat_element.space_dimension()
         return numpy.fromiter((phi(f) for phi in fiat_element.get_dual_set().get_nodes()),
                               numpy.double, count=dim)
 
+    # Temporary
+    bc_map = {}
+
+    # Iterate over cells
     for c in range(cell_facet_conn.shape[0]):
-        is_boundary = [cell_facet_conn[c][f] for f in range(num_facets_per_cell)]
+
+        # Check which facets are on boundary
+        is_boundary = [cell_facet_conn[c][f] in boundary_facets
+                       for f in range(num_facets_per_cell)]
 
         if any(is_boundary):
 
             # NB: This is affine transformation resulting from UFC
             #     simplex definition in FIAT
             b = vertices[cell_vertex_conn[c, 0 ]]
-            B = vertices[cell_vertex_conn[c, 1:]] - b.reshape(b.shape+(1,))
+            B = ( vertices[cell_vertex_conn[c, 1:]] - b ).T
 
+            # Interpolate Dirichlet datum
             dof_vals = interpolation_operator(f_hat(B, b))
             dof_indices = cell_dofs[c]
 
             local_boundary_facets, = numpy.where(is_boundary)
-            local_boundary_dofs = numpy.fromiter(set(d for f in range(num_facets_per_cell) for d in facet_dofs[f]),
+            local_boundary_dofs = numpy.fromiter(set(d for f in local_boundary_facets for d in facet_dofs[f]),
                                                  dof_indices.dtype)
             for d in local_boundary_dofs:
                 bc_map[dof_indices[d]] = dof_vals[d]

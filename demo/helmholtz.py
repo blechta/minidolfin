@@ -69,21 +69,3 @@ triang = tri.Triangulation(mesh.vertices[:, 0], mesh.vertices[:, 1],
                            mesh.get_connectivity(tdim, 0))
 pyplot.tripcolor(triang, vertex_values)
 pyplot.show()
-
-
-
-#import numpy
-#num_cells = mesh.num_entities(tdim)
-#for c in range(num_cells):
-#    cv = mesh.get_connectivity(tdim, 0)[c]
-#    for dof, vert in zip(dofmap.cell_dofs[c], cv):
-#        if dof in bc_dofs:
-#            i = numpy.argmax(bc_dofs == dof)
-#            print(dof, bc_dofs[i], bc_vals[i]-mesh.vertices[vert][0])
-#            ff = mesh.get_connectivity(tdim-1, 0) == vert
-#            #import pdb; pdb.set_trace()
-#            ff = numpy.where(ff)[0]
-#            try:
-#                assert any(f for f in ff if f in mesh.boundary_facets)
-#            except AssertionError:
-#                print("facets", ff, "cell", c, "dof", dof, "vert", vert)

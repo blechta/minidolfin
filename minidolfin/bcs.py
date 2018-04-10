@@ -67,12 +67,16 @@ def build_dirichlet_dofs(dofmap, value):
             dof_vals = interpolation_operator(f_hat(B, b))
             dof_indices = cell_dofs[c]
 
+            # Figure out which facets and dofs are on boundary
             local_boundary_facets, = numpy.where(is_boundary)
             local_boundary_dofs = numpy.fromiter(set(d for f in local_boundary_facets for d in facet_dofs[f]),
                                                  dof_indices.dtype)
+
+            # Store dof-value pair into temporary
             for d in local_boundary_dofs:
                 bc_map[dof_indices[d]] = dof_vals[d]
 
+    # Convert to arrays
     dofs = numpy.fromiter(bc_map.keys(), numpy.int32, count=len(bc_map))
     vals = numpy.fromiter(bc_map.values(), numpy.double, count=len(bc_map))
 

@@ -13,6 +13,7 @@ from minidolfin.dofmap import interpolate_vertex_values
 from minidolfin.petsc import create_matrix_from_csr
 from minidolfin.assembling import assemble
 from minidolfin.bcs import build_dirichlet_dofs
+from minidolfin.petsc import set_solver_package
 
 
 # Plane wave
@@ -54,7 +55,7 @@ A.zeroRowsColumns(bc_dofs, diag=1, x=x, b=b)
 ksp = PETSc.KSP().create(A.comm)
 ksp.setType(PETSc.KSP.Type.PREONLY)
 ksp.pc.setType(PETSc.PC.Type.CHOLESKY)
-ksp.pc.setFactorSolverPackage("mumps")
+set_solver_package(ksp.pc, "mumps")
 #A.setOption(PETSc.Mat.Option.SPD, True)  # FIXME: Is that true?
 ksp.setOperators(A)
 ksp.setUp()

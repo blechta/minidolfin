@@ -16,3 +16,11 @@ def create_matrix_from_csr(csr):
     A.setOption(PETSc.Mat.Option.NEW_NONZERO_LOCATION_ERR, True)
 
     return A
+
+
+if PETSc.Sys.getVersion()[0:2] <= (3, 8) and PETSc.Sys.getVersionInfo()['release']:
+    def set_solver_package(pc, package):
+        pc.setFactorSolverPackage(package)
+else:
+    def set_solver_package(pc, package):
+        pc.setFactorSolverType(package)

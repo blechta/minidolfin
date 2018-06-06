@@ -81,6 +81,12 @@ def pattern_to_csr(pattern, dtype=numpy.int32):
 
 def interpolate_vertex_values(dofmap, x):
 
+    """NB: This is the path working when the element
+    has vertex dofs. If it does not one needs to take whole
+    expansion and evaluate basis members at vertices.
+
+    FIXME: Add assertion?! Or add proper fix?"""
+
     # Fetch data from mesh
     tdim = dofmap.mesh.reference_cell.get_dimension()
     num_cells = dofmap.mesh.num_entities(tdim)

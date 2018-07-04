@@ -76,7 +76,7 @@ def assemble(petsc_tensor, dofmap, form):
     element_dims = tuple(fe.space_dimension() for fe in fiat_elements)
     _A = numpy.ndarray(element_dims)
 
-    # Prepary coordinates temporary
+    # Prepare coordinates temporary
     num_vertices_per_cell = cells.shape[1]
     gdim = vertices.shape[1]
     _coords = numpy.ndarray((num_vertices_per_cell, gdim), dtype=numpy.double)

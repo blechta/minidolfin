@@ -1,6 +1,8 @@
 import tsfc
 import dijitso
+import ffc.compiler
 from coffee.plan import ASTKernel
+
 import numpy
 import numba
 from petsc4py import PETSc
@@ -9,11 +11,42 @@ import ctypes
 import hashlib
 
 
-def compile_form(a):
+def ffc_compile_wrapper(form, extra_parameters = None):
+    parameters = ffc.parameters.default_parameters()
+    parameters.update({} if extra_parameters is None else extra_parameters)
 
-    # Define generation function executed on cache miss
-    def generate(form, name, signature, params):
-        kernel, = tsfc.compile_form(form, parameters={'mode': 'spectral'})
+    # Call FFC
+    code_h, code_c = ffc.compiler.compile_form(form, parameters=parameters)
+
+    prefix = "form"
+    form_index = 0
+
+    # Extract tabulate_tensor definition
+    function_name = "tabulate_tensor_{}_cell_integral_{}_otherwise".format(prefix, form_index)
+    index_start = code_c.index("void {}(".format(function_name))
+    index_end = code_c.index("ufc_cell_integral* create_{}_cell_integral_{}_otherwise(void)".format(prefix, form_index),
+                             index_start)
+    tabulate_tensor_code = code_c[index_start:index_end].strip()
+
+    # Extract tabulate_tensor body
+    body_start = tabulate_tensor_code.index("{")
+    tabulate_tensor_body = tabulate_tensor_code[body_start:].strip()
+
+    tabulate_tensor_signature = "void form_cell_integral_otherwise (double* restrict A, const double *restrict coordinate_dofs)"
+
+    return "\n".join([
+        "#include <math.h>\n",
+        "#include <stdalign.h>\n",
+        tabulate_tensor_signature,
+        tabulate_tensor_body
+    ])
+
+
+def tsfc_compile_wrapper(form, extra_parameters = None):
+    parameters = {'mode': 'spectral'}
+    parameters.update({} if extra_parameters is None else extra_parameters)
+
+    kernel, = tsfc.compile_form(form, parameters=parameters)
 
         k = ASTKernel(kernel.ast)
         k.plan_cpu(dict(optlevel='Ov'))
@@ -23,6 +56,20 @@ def compile_form(a):
         code = code.replace('static inline', '')
         code = "#include <math.h>\n\n" + code
 
+    return code
+
+
+def compile_form(a, form_compiler="tsfc", form_compiler_parameters=None):
+    form_compilers = {
+        "ffc": lambda form: ffc_compile_wrapper(form, form_compiler_parameters),
+        "tsfc": lambda form: tsfc_compile_wrapper(form, form_compiler_parameters)
+    }
+
+    form_compiler = form_compilers[form_compiler]
+
+    # Define generation function executed on cache miss
+    def generate(form, name, signature, params):
+        code = form_compiler(form)
         return None, code, ()
 
     # Compute unique name

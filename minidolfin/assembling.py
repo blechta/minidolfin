@@ -113,11 +113,11 @@ ADD_VALUES = PETSc.InsertMode.ADD_VALUES
 del petsc
 
 
-def assemble(petsc_tensor, dofmap, form):
+def assemble(petsc_tensor, dofmap, form, form_compiler=None, form_compiler_parameters=None):
     assert len(form.arguments()) == 2, "Now only bilinear forms"
 
     # JIT compile UFL form into ctypes function
-    assembly_kernel = compile_form(form)
+    assembly_kernel = compile_form(form, form_compiler, form_compiler_parameters)
 
     # Fetch data
     tdim = dofmap.mesh.reference_cell.get_dimension()

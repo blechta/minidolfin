@@ -11,7 +11,28 @@ import ctypes
 import hashlib
 
 
+def tsfc_compile_wrapper(form, extra_parameters = None):
+    """Compiles form with TSFC and returns source code."""
+
+    parameters = {'mode': 'spectral'}
+    parameters.update({} if extra_parameters is None else extra_parameters)
+
+    kernel, = tsfc.compile_form(form, parameters=parameters)
+
+    k = ASTKernel(kernel.ast)
+    k.plan_cpu(dict(optlevel='Ov'))
+
+    code = kernel.ast.gencode()
+
+    code = code.replace('static inline', '')
+    code = "#include <math.h>\n\n" + code
+
+    return code
+
+
 def ffc_compile_wrapper(form, extra_parameters = None):
+    """Compiles form with FFC and returns source code."""
+
     parameters = ffc.parameters.default_parameters()
     parameters.update({} if extra_parameters is None else extra_parameters)
 
@@ -42,34 +63,22 @@ def ffc_compile_wrapper(form, extra_parameters = None):
     ])
 
 
-def tsfc_compile_wrapper(form, extra_parameters = None):
-    parameters = {'mode': 'spectral'}
-    parameters.update({} if extra_parameters is None else extra_parameters)
+def compile_form(a, form_compiler=None, form_compiler_parameters=None):
+    """Compiles form with the specified compiler and returns a ctypes function ptr."""
 
-    kernel, = tsfc.compile_form(form, parameters=parameters)
+    # Use tsfc as default form compiler
+    form_compiler = "tsfc" if form_compiler is None else form_compiler
 
-        k = ASTKernel(kernel.ast)
-        k.plan_cpu(dict(optlevel='Ov'))
-
-        code = kernel.ast.gencode()
-
-        code = code.replace('static inline', '')
-        code = "#include <math.h>\n\n" + code
-
-    return code
-
-
-def compile_form(a, form_compiler="tsfc", form_compiler_parameters=None):
     form_compilers = {
         "ffc": lambda form: ffc_compile_wrapper(form, form_compiler_parameters),
         "tsfc": lambda form: tsfc_compile_wrapper(form, form_compiler_parameters)
     }
 
-    form_compiler = form_compilers[form_compiler]
+    run_form_compiler = form_compilers[form_compiler]
 
     # Define generation function executed on cache miss
     def generate(form, name, signature, params):
-        code = form_compiler(form)
+        code = run_form_compiler(form)
         return None, code, ()
 
     # Compute unique name

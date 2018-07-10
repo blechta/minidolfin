@@ -82,8 +82,8 @@ def compile_form(a, form_compiler=None, form_compiler_parameters=None):
         return None, code, ()
 
     # Compute unique name
-    name = "mfc" + a.signature()
-    name = hashlib.sha1(name.encode()).hexdigest()
+    name = "mfc_{}_{}_{}".format(form_compiler, str(form_compiler_parameters), a.signature())
+    hashed_name = hashlib.sha1(name.encode()).hexdigest()
 
     # Set dijitso into C mode
     params = {
@@ -95,7 +95,7 @@ def compile_form(a, form_compiler=None, form_compiler_parameters=None):
     }
 
     # Do JIT compilation
-    module, name = dijitso.jit(a, name, params, generate=generate)
+    module, name = dijitso.jit(a, hashed_name, params, generate=generate)
 
     # Grab assembly kernel from ctypes module and set its arguments
     func = getattr(module, 'form_cell_integral_otherwise')

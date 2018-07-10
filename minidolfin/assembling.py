@@ -7,6 +7,7 @@ import numpy
 import numba
 from petsc4py import PETSc
 
+import os
 import ctypes
 import hashlib
 
@@ -106,7 +107,8 @@ def compile_form(a, form_compiler=None, form_compiler_parameters=None):
 
 # Get C MatSetValues function from PETSc because can't call
 # petsc4py.PETSc.Mat.setValues() with numba.jit(nopython=True)
-petsc = ctypes.CDLL('libpetsc.so')
+petsc_dir = os.environ.get('PETSC_DIR', None)
+petsc = ctypes.CDLL('libpetsc.so' if petsc_dir is None else os.path.join(petsc_dir, 'lib/libpetsc.so'))
 MatSetValues = petsc.MatSetValues
 MatSetValues.argtypes = 7*(ctypes.c_void_p,)
 ADD_VALUES = PETSc.InsertMode.ADD_VALUES

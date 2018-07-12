@@ -18,4 +18,4 @@ setup(name="minidolfin",
       author_email="blechta@karlin.mff.cuni.cz",
       license="LGPL v3 or later",
       packages=["minidolfin"],
-      install_requires=["tsfc", "fenics-dijitso", "numba", "petsc4py", "matplotlib"])
+      install_requires=["tsfc", "fenics-ffc", "numba", "petsc4py", "matplotlib"])

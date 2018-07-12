@@ -2,6 +2,7 @@ numpy
 git+https://bitbucket.org/fenics-project/fiat.git#egg=fenics-fiat
 git+https://bitbucket.org/fenics-project/ufl.git#egg=fenics-ufl
 git+https://bitbucket.org/fenics-project/dijitso.git#egg=fenics-dijitso
+git+https://github.com/FEniCS/ffcx.git#egg=fenics-ffc
 git+https://github.com/blechta/FInAT.git
 PuLP
 git+https://github.com/blechta/COFFEE.git

@@ -8,7 +8,6 @@ and in the container::
 
     pip3 install --user -r requirements.txt
     pip3 install --user -e .
-    export LD_LIBRARY_PATH=/usr/local/petsc-32/lib:$LD_LIBRARY_PATH
 
 To run a demo::
 

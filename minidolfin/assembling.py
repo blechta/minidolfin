@@ -2,23 +2,26 @@ import tsfc
 import dijitso
 import ffc.compiler
 from coffee.plan import ASTKernel
+from ufl.utils.sorting import canonicalize_metadata
 
 import numpy
 import numba
 from petsc4py import PETSc
 
+import sys
 import os
 import ctypes
+import ctypes.util
 import hashlib
 
 
-def tsfc_compile_wrapper(form, extra_parameters = None):
-    """Compiles form with TSFC and returns source code."""
+def tsfc_compile_wrapper(form, parameters=None):
+    """Compile form with TSFC and return source code"""
 
-    parameters = {'mode': 'spectral'}
-    parameters.update({} if extra_parameters is None else extra_parameters)
+    parameters_ = {'mode': 'spectral'}
+    parameters_.update(parameters or {})
 
-    kernel, = tsfc.compile_form(form, parameters=parameters)
+    kernel, = tsfc.compile_form(form, parameters=parameters_)
 
     k = ASTKernel(kernel.ast)
     k.plan_cpu(dict(optlevel='Ov'))
@@ -31,14 +34,14 @@ def tsfc_compile_wrapper(form, extra_parameters = None):
     return code
 
 
-def ffc_compile_wrapper(form, extra_parameters = None):
-    """Compiles form with FFC and returns source code."""
+def ffc_compile_wrapper(form, parameters=None):
+    """Compile form with FFC and return source code"""
 
-    parameters = ffc.parameters.default_parameters()
-    parameters.update({} if extra_parameters is None else extra_parameters)
+    parameters_ = ffc.parameters.default_parameters()
+    parameters_.update(parameters or {})
 
     # Call FFC
-    code_h, code_c = ffc.compiler.compile_form(form, parameters=parameters)
+    code_h, code_c = ffc.compiler.compile_form(form, parameters=parameters_)
 
     prefix = "form"
     form_index = 0
@@ -57,37 +60,41 @@ def ffc_compile_wrapper(form, extra_parameters = None):
     tabulate_tensor_signature = "void form_cell_integral_otherwise (double* restrict A, const double *restrict coordinate_dofs)"
 
     return "\n".join([
-        "#include <math.h>\n",
-        "#include <stdalign.h>\n",
+        "#include <math.h>",
+        "#include <stdalign.h>",
+        "#include <string.h>",
+        ""
         tabulate_tensor_signature,
-        tabulate_tensor_body
+        tabulate_tensor_body,
     ])
 
 
-def compile_form(a, form_compiler=None, form_compiler_parameters=None):
-    """Compiles form with the specified compiler and returns a ctypes function ptr."""
+def jit_compile_form(a, parameters=None):
+    """JIT-compile form and return ctypes function pointer"""
+
+    # Prevent modification of user parameters
+    parameters = parameters.copy() if parameters is not None else {}
 
     # Use tsfc as default form compiler
-    form_compiler = "tsfc" if form_compiler is None else form_compiler
-
-    form_compilers = {
-        "ffc": lambda form: ffc_compile_wrapper(form, form_compiler_parameters),
-        "tsfc": lambda form: tsfc_compile_wrapper(form, form_compiler_parameters)
-    }
-
-    run_form_compiler = form_compilers[form_compiler]
+    compiler = parameters.pop("compiler", "tsfc")
+    compile_form = {"ffc": ffc_compile_wrapper,
+                    "tsfc": tsfc_compile_wrapper
+                   }[compiler]
 
     # Define generation function executed on cache miss
-    def generate(form, name, signature, params):
-        code = run_form_compiler(form)
+    def generate(form, name, signature, jit_params):
+        code = compile_form(form, parameters=parameters)
         return None, code, ()
 
     # Compute unique name
-    name = "mfc_{}_{}_{}".format(form_compiler, str(form_compiler_parameters), a.signature())
-    hashed_name = hashlib.sha1(name.encode()).hexdigest()
+    hash_data = ("minidolfin", compiler,
+                 canonicalize_metadata(parameters),
+                 a.signature())
+    hash = hashlib.sha512(str(hash_data).encode("utf-8")).hexdigest()
+    name = "minidolfin_{}_{}".format(compiler, hash)
 
     # Set dijitso into C mode
-    params = {
+    jit_params = {
          'build': {
              'cxx': 'cc',
              'cxxflags': ('-Wall', '-shared', '-fPIC', '-std=c11'),
@@ -96,7 +103,7 @@ def compile_form(a, form_compiler=None, form_compiler_parameters=None):
     }
 
     # Do JIT compilation
-    module, name = dijitso.jit(a, hashed_name, params, generate=generate)
+    module, name = dijitso.jit(a, name, jit_params, generate=generate)
 
     # Grab assembly kernel from ctypes module and set its arguments
     func = getattr(module, 'form_cell_integral_otherwise')
@@ -107,19 +114,26 @@ def compile_form(a, form_compiler=None, form_compiler_parameters=None):
 
 # Get C MatSetValues function from PETSc because can't call
 # petsc4py.PETSc.Mat.setValues() with numba.jit(nopython=True)
-petsc_dir = os.environ.get('PETSC_DIR', None)
-petsc = ctypes.CDLL('libpetsc.so' if petsc_dir is None else os.path.join(petsc_dir, 'lib/libpetsc.so'))
+libpetsc_path = ctypes.util.find_library('petsc')
+if libpetsc_path is None:
+    # NB: This is a hack for ctypes 3.5 which does not look into LD_LIBRARY_PATH
+    petsc_dir = os.environ.get('PETSC_DIR', None)
+    if petsc_dir is None:
+        raise RuntimeError("Didn't find libpetsc. Try exporting PETSC_DIR.")
+    so = {'linux': '.so', 'darwin': '.dylib'}[sys.platform]
+    libpetsc_path = os.path.join(petsc_dir, 'lib', 'libpetsc' + so)
+petsc = ctypes.CDLL(libpetsc_path)
 MatSetValues = petsc.MatSetValues
 MatSetValues.argtypes = 7*(ctypes.c_void_p,)
 ADD_VALUES = PETSc.InsertMode.ADD_VALUES
 del petsc
 
 
-def assemble(petsc_tensor, dofmap, form, form_compiler=None, form_compiler_parameters=None):
+def assemble(petsc_tensor, dofmap, form, form_compiler_parameters=None):
     assert len(form.arguments()) == 2, "Now only bilinear forms"
 
     # JIT compile UFL form into ctypes function
-    assembly_kernel = compile_form(form, form_compiler, form_compiler_parameters)
+    assembly_kernel = jit_compile_form(form, form_compiler_parameters)
 
     # Fetch data
     tdim = dofmap.mesh.reference_cell.get_dimension()

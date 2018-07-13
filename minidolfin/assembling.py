@@ -57,16 +57,16 @@ def ffc_compile_wrapper(form, parameters=None):
     body_start = tabulate_tensor_code.index("{")
     tabulate_tensor_body = tabulate_tensor_code[body_start:].strip()
 
-    tabulate_tensor_signature = "void form_cell_integral_otherwise (double* restrict A, const double *restrict coordinate_dofs)"
-
-    return "\n".join([
+    # Compose complete code
+    includes = [
         "#include <math.h>",
         "#include <stdalign.h>",
         "#include <string.h>",
-        ""
-        tabulate_tensor_signature,
-        tabulate_tensor_body,
-    ])
+    ]
+    tabulate_tensor_signature = "void form_cell_integral_otherwise (double* restrict A, const double *restrict coordinate_dofs)"
+    parts = includes + ["", tabulate_tensor_signature, tabulate_tensor_body]
+
+    return "\n".join(parts)
 
 
 def jit_compile_form(a, parameters=None):

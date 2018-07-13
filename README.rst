@@ -32,13 +32,13 @@ To run a demo::
 Authors
 =======
 
-* @blechta
-* @w1th0utnam3
+* `@blechta <https://github.com/blechta>`_
+* `@w1th0utnam3 <https://github.com/w1th0utnam3>`_
 
 License
 =======
 
-GNU LGPL v3 or any later version: `COPYING`_, `COPYING.LESSER`_.
+GNU LGPL v3 or any later version: `<COPYING>`_, `<COPYING.LESSER>`_.
 
 Testing
 =======

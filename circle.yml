@@ -34,6 +34,7 @@ jobs:
             python3 helmholtz.py -d -n 4
             python3 helmholtz.py -d -n 4 -c tsfc -f mode=spectral
             python3 helmholtz.py -d -n 4 -c tsfc -f mode=vanilla
+            python3 helmholtz.py -d -n 4 -c tsfc -f mode=tensor
             python3 helmholtz.py -d -n 4 -c ffc -r uflacs -f enable_preintegration=1
             python3 helmholtz.py -d -n 4 -c ffc -r uflacs -f enable_preintegration=0
             python3 helmholtz.py -d -n 4 -c ffc -r tsfc -f mode=vanilla
@@ -46,6 +47,7 @@ jobs:
             python3 helmholtz.py
             python3 helmholtz.py -c tsfc -f mode=spectral
             python3 helmholtz.py -c tsfc -f mode=vanilla
+            python3 helmholtz.py -c tsfc -f mode=tensor
             python3 helmholtz.py -c ffc -r uflacs -f enable_preintegration=1
             python3 helmholtz.py -c ffc -r uflacs -f enable_preintegration=0
             python3 helmholtz.py -c ffc -r tsfc -f mode=vanilla

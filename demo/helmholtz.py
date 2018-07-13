@@ -1,9 +1,12 @@
 import ufl
+import dijitso
+import ffc
 from petsc4py import PETSc
 from matplotlib import pyplot, tri
 
 import timeit
 import math
+import argparse
 
 from minidolfin.meshing import build_unit_square_mesh
 from minidolfin.dofmap import build_dofmap
@@ -16,6 +19,37 @@ from minidolfin.bcs import build_dirichlet_dofs
 from minidolfin.petsc import set_solver_package
 
 
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description="minidolfin Helmholtz demo",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument("-n", "--mesh-size", type=int, dest="n", default=256,
+                    help="mesh resolution")
+parser.add_argument("-c", "--form-compiler", type=str, dest="form_compiler",
+                    default="tsfc", choices=["tsfc", "ffc"],
+                    help="form compiler")
+parser.add_argument("-r", "--representation", type=str, dest="representation",
+                    default="uflacs", choices=["uflacs", "tsfc"],
+                    help="ffc representation")
+parser.add_argument("-f", action="append", dest="form_compiler_parameters",
+                    metavar="parameter=value", default=[],
+                    help="additional form compiler paramter")
+parser.add_argument("-d", "--debug", action='store_true', default=False,
+                    help="enable debug output")
+args = parser.parse_args()
+
+# Make dijitso talk to us
+if args.debug:
+    dijitso.set_log_level("DEBUG")
+    ffc.logger.setLevel("DEBUG")
+
+# Build form compiler parameters
+form_compiler_parameters = {}
+form_compiler_parameters["compiler"] = args.form_compiler
+form_compiler_parameters["representation"] = args.representation
+for p in args.form_compiler_parameters:
+    k, v = p.split("=")
+    form_compiler_parameters[k] = v
+
 # Plane wave
 omega2 = 1.5**2 + 1**2
 u_exact = lambda x: math.cos(-1.5*x[0] + x[1])
@@ -26,7 +60,7 @@ u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
 a = (ufl.inner(ufl.grad(u), ufl.grad(v)) - omega2*ufl.dot(u, v))*ufl.dx
 
 # Build mesh
-mesh = build_unit_square_mesh(256, 256)
+mesh = build_unit_square_mesh(args.n, args.n)
 tdim = mesh.reference_cell.get_dimension()
 print('Number cells: {}'.format(mesh.num_entities(tdim)))
 
@@ -41,7 +75,7 @@ A = create_matrix_from_csr((i, j))
 
 # Run and time assembly
 t = -timeit.default_timer()
-assemble(A, dofmap, a)
+assemble(A, dofmap, a, form_compiler_parameters)
 t += timeit.default_timer()
 print('Assembly time a: {}'.format(t))
 

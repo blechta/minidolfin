@@ -1,0 +1,35 @@
+version: 2
+jobs:
+  build:
+
+    docker:
+      - image: quay.io/fenicsproject/dev-env:latest
+        user: fenics
+        environment:
+          MPLBACKEND: "agg"
+
+
+    working_directory: /home/fenics/minidolfin
+
+    steps:
+      - checkout
+
+      - run:
+          name: Install minidolfin
+          command: |
+            pip3 install --user -r requirements.txt
+            pip3 install --user .
+
+      - run:
+          name: Environment and FFC version info
+          command: |
+            echo $USER $HOME $PWD $PATH $LD_LIBRARY_PATH $CMAKE_PREFIX_PATH
+            python3 -c'import ffc, ffc.git_commit_hash; \
+                print(ffc.git_commit_hash.git_commit_hash(), ffc.backends.ufc.get_signature())'
+
+      - run:
+          name: Test demo
+          command: |
+            cd demo
+            python3 helmholtz.py
+

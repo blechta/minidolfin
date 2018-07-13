@@ -27,7 +27,8 @@ and in the container::
 To run a demo::
 
     cd demo
-    python3 helmholtz.py
+    python3 helmholtz.py -h
+    python3 helmholtz.py [args]
 
 Authors
 =======

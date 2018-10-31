@@ -125,21 +125,25 @@ if libpetsc_path is None:
 petsc = ctypes.CDLL(libpetsc_path)
 MatSetValues = petsc.MatSetValues
 MatSetValues.argtypes = 7*(ctypes.c_void_p,)
+VecSetValues = petsc.VecSetValues
+VecSetValues.argtypes = 5*(ctypes.c_void_p,)
 ADD_VALUES = PETSc.InsertMode.ADD_VALUES
 del petsc
 
 
-def assemble(petsc_tensor, dofmap, form, form_compiler_parameters=None):
-    assert len(form.arguments()) == 2, "Now only bilinear forms"
+def assemble(petsc_tensor, dofmaps, form, form_compiler_parameters=None):
+    rank = len(form.arguments())
+    assert rank in [0, 1, 2]
 
     # JIT compile UFL form into ctypes function
     assembly_kernel = jit_compile_form(form, form_compiler_parameters)
 
     # Fetch data
-    tdim = dofmap.mesh.reference_cell.get_dimension()
-    cells = dofmap.mesh.get_connectivity(tdim, 0)
-    vertices = dofmap.mesh.vertices
-    cell_dofs = dofmap.cell_dofs
+    mesh, = set(dofmaps[i].mesh for i in range(rank))
+    tdim = mesh.reference_cell.get_dimension()
+    cells = mesh.get_connectivity(tdim, 0)
+    vertices = mesh.vertices
+    cell_dofs = tuple(dofmaps[i].cell_dofs for i in range(rank))
     mat = petsc_tensor.handle
 
     # Prepare cell tensor temporary
@@ -152,12 +156,13 @@ def assemble(petsc_tensor, dofmap, form, form_compiler_parameters=None):
     num_vertices_per_cell = cells.shape[1]
     gdim = vertices.shape[1]
     _coords = numpy.ndarray((num_vertices_per_cell, gdim), dtype=numpy.double)
+    _dofs_addr = numpy.ndarray((rank,), dtype=numpy.uintp)
 
     @numba.jit(nopython=True)
-    def _assemble(assembly_kernel, cells, vertices, cell_dofs, mat, _coords, _A):
+    def _assemble(assembly_kernel, cells, vertices, cell_dofs, mat, _coords, _dofs_addr, _A):
         coords_ptr = _coords.ctypes.data
         A_ptr = _A.ctypes.data
-        nrows = ncols = cell_dofs.shape[1]
+        shp = [dofs.shape[1] for dofs in cell_dofs]
 
         # Loop over cells
         for i in range(cells.shape[0]):
@@ -170,11 +175,26 @@ def assemble(petsc_tensor, dofmap, form, form_compiler_parameters=None):
             assembly_kernel(A_ptr, coords_ptr)
 
             # Add to global tensor
-            rows = cols = cell_dofs[i].ctypes.data
-            ierr = MatSetValues(mat, nrows, rows, ncols, cols, A_ptr, ADD_VALUES)
+            for j in range(rank):
+                _dofs_addr[j] = numpy.uintp(cell_dofs[j][i].ctypes.data)
+            _add_values(mat, shp, _dofs_addr, A_ptr)
+
+    if rank == 0:
+        @numba.jit(nopython=True)
+        def _add_values(scalar, shp, dofs, vals):
+            scalar += vals
+    elif rank == 1:
+        @numba.jit(nopython=True)
+        def _add_values(vec, shp, dofs, vals):
+            ierr = VecSetValues(vec, shp[0], dofs[0], vals, ADD_VALUES)
+            assert ierr == 0
+    elif rank == 2:
+        @numba.jit(nopython=True)
+        def _add_values(mat, shp, dofs, vals):
+            ierr = MatSetValues(mat, shp[0], dofs[0], shp[1], dofs[1], vals, ADD_VALUES)
             assert ierr == 0
 
     # Call jitted hot loop
-    _assemble(assembly_kernel, cells, vertices, cell_dofs, mat, _coords, _A)
+    _assemble(assembly_kernel, cells, vertices, cell_dofs, mat, _coords, _dofs_addr, _A)
 
     petsc_tensor.assemble()

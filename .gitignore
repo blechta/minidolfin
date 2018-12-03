@@ -1,2 +1,3 @@
 /minidolfin.egg-info
-/minidolfin/__pycache__
+__pycache__
+.cache

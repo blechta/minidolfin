@@ -132,51 +132,88 @@ del petsc
 
 
 def assemble(petsc_tensor, dofmaps, form, form_compiler_parameters=None):
-    rank = len(form.arguments())
-    assert rank in [0, 1, 2]
-
     # JIT compile UFL form into ctypes function
     assembly_kernel = jit_compile_form(form, form_compiler_parameters)
 
+    # Extact rank
+    rank = len(form.arguments())
+    assert len(dofmaps) == rank
+
+    # Extract mesh
+    mesh0, = set(dofmap.mesh for dofmap in dofmaps) or (None,)
+    mesh = form.ufl_domain().ufl_cargo() or mesh0
+    if mesh0 is not None:
+        assert mesh0.ufl_id() == mesh.ufl_id()
+
     # Fetch data
-    mesh, = set(dofmaps[i].mesh for i in range(rank))
-    tdim = mesh.reference_cell.get_dimension()
+    tdim = mesh.ufl_cell().topological_dimension()
     cells = mesh.get_connectivity(tdim, 0)
     vertices = mesh.vertices
-    cell_dofs = tuple(dofmaps[i].cell_dofs for i in range(rank))
-    mat = petsc_tensor.handle
+    cell_dofs = list(dofmap.cell_dofs for dofmap in dofmaps)
+
+    if rank in [1, 2]:
+        mat = petsc_tensor.handle
+    else:
+        mat = petsc_tensor
 
     # Prepare cell tensor temporary
     elements = tuple(arg.ufl_element() for arg in form.arguments())
     fiat_elements = map(tsfc.fiatinterface.create_element, elements)
-    element_dims = tuple(fe.space_dimension() for fe in fiat_elements)
+    element_dims = [fe.space_dimension() for fe in fiat_elements]
     _A = numpy.ndarray(element_dims)
 
     # Prepare coordinates temporary
     num_vertices_per_cell = cells.shape[1]
     gdim = vertices.shape[1]
     _coords = numpy.ndarray((num_vertices_per_cell, gdim), dtype=numpy.double)
-    _dofs_addr = numpy.ndarray((rank,), dtype=numpy.uintp)
 
-    @numba.jit(nopython=True)
+    _dofs_addr = numpy.ndarray((rank,), dtype=numpy.uintp)
+    #_shp = numpy.array((dofs.shape[1] for dofs in cell_dofs), dtype=numpy.uintp)
+
+    #sig = "
+
+
+
+    args = [
+        #"ExternalFunctionPointer((void*, void*) -> void)",
+        "void(void, void)",
+        "array(uint32, 2d, C)",
+        "array(float64, 2d, C)",
+        "reflected list(array(int32, 2d, C))",
+        "int64",
+        "array(float64, 2d, C)",
+        "array(uint64, 1d, C)",
+        "array(float64, 2d, C)",
+    ]
+    sig = "void(" + ",".join(args) + ")"
+
+    sig = 'void(void(voidptr, voidptr), Array(uint32, 2, "C"), Array(float64, 2, "C"), List(Array(int32, 2, "C")), int64, Array(float64, 2, "C"), Array(uint64, 1, "C"), Array(float64, 2, "C"))'
+
+
+    #@numba.jit(nopython=True, locals={'j': numba.intp}, cache=True)
+
+    @numba.jit(sig, nopython=True, locals={'j': numba.intp})
     def _assemble(assembly_kernel, cells, vertices, cell_dofs, mat, _coords, _dofs_addr, _A):
         coords_ptr = _coords.ctypes.data
         A_ptr = _A.ctypes.data
-        shp = [dofs.shape[1] for dofs in cell_dofs]
+        shp = _A.shape
+        rnk = len(shp)
 
         # Loop over cells
         for i in range(cells.shape[0]):
 
             # Update temporaries
             _coords[:] = vertices[cells[i]]
-            _A[:] = 0
+            _A[()] = 0
 
             # Assemble cell tensor
             assembly_kernel(A_ptr, coords_ptr)
 
             # Add to global tensor
-            for j in range(rank):
-                _dofs_addr[j] = numpy.uintp(cell_dofs[j][i].ctypes.data)
+            for j in range(rnk):
+                #_dofs_addr[j] = numpy.uintp(cell_dofs[j][i].ctypes.data)
+                #print(cell_dofs[j])
+                _dofs_addr[j] = cell_dofs[j][i].ctypes.data
             _add_values(mat, shp, _dofs_addr, A_ptr)
 
     if rank == 0:
@@ -194,7 +231,11 @@ def assemble(petsc_tensor, dofmaps, form, form_compiler_parameters=None):
             ierr = MatSetValues(mat, shp[0], dofs[0], shp[1], dofs[1], vals, ADD_VALUES)
             assert ierr == 0
 
+
     # Call jitted hot loop
+    for arg in (assembly_kernel, cells, vertices, cell_dofs, mat, _coords, _dofs_addr, _A):
+        print(numba.typeof(arg))
+    import pdb; pdb.set_trace()
     _assemble(assembly_kernel, cells, vertices, cell_dofs, mat, _coords, _dofs_addr, _A)
 
     petsc_tensor.assemble()

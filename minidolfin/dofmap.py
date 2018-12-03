@@ -9,10 +9,10 @@ DofMap = collections.namedtuple("DofMap", "cell_dofs dim mesh element")
 
 
 def build_dofmap(element, mesh):
-    fiat_element = tsfc.fiatinterface.create_element(element)
 
-    assert mesh.reference_cell == fiat_element.get_reference_element()
-    tdim = mesh.reference_cell.get_dimension()
+    assert mesh.ufl_cell() == element.cell()
+    tdim = mesh.ufl_cell().topological_dimension()
+    fiat_element = tsfc.fiatinterface.create_element(element)
 
     # Build cell dofs - mapping of cells to global dofs.
     # cell_dofs(i, j) is global dof number for cell i and local dof
@@ -40,7 +40,7 @@ def build_dofmap(element, mesh):
 def build_sparsity_pattern(dofmap):
 
     # Fetch data
-    tdim = dofmap.mesh.reference_cell.get_dimension()
+    tdim = dofmap.mesh.ufl_cell().topological_dimension()
     num_cells = dofmap.mesh.num_entities(tdim)
     cell_dofs = dofmap.cell_dofs
 
@@ -88,7 +88,7 @@ def interpolate_vertex_values(dofmap, x):
     FIXME: Add assertion?! Or add proper fix?"""
 
     # Fetch data from mesh
-    tdim = dofmap.mesh.reference_cell.get_dimension()
+    tdim = dofmap.mesh.ufl_cell().topological_dimension()
     num_cells = dofmap.mesh.num_entities(tdim)
     num_vertices = dofmap.mesh.num_entities(0)
 

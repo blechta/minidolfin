@@ -62,7 +62,7 @@ L = v*ufl.dx
 
 # Build mesh
 mesh = build_unit_square_mesh(args.n, args.n)
-tdim = mesh.reference_cell.get_dimension()
+tdim = mesh.ufl_cell().topological_dimension()
 print('Number cells: {}'.format(mesh.num_entities(tdim)))
 
 # Build dofmap

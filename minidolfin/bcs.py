@@ -5,7 +5,7 @@ import numpy
 def build_dirichlet_dofs(dofmap, value):
 
     # Fetch mesh data
-    tdim = dofmap.mesh.reference_cell.get_dimension()
+    tdim = dofmap.mesh.ufl_cell().topological_dimension()
     cell_vertex_conn = dofmap.mesh.get_connectivity(tdim, 0)
     cell_facet_conn = dofmap.mesh.get_connectivity(tdim, tdim-1)
     vertices = dofmap.mesh.vertices

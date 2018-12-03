@@ -1,14 +1,17 @@
+import ufl
 import FIAT
 import numpy
 import numba
 
+from weakref import proxy
+
 
 class Mesh(object):
 
-    def __init__(self, reference_cell, vertices, cells):
-        tdim = reference_cell.get_dimension()
+    def __init__(self, ufl_cell, vertices, cells):
+        tdim = ufl_cell.topological_dimension()
 
-        self.reference_cell = reference_cell
+        self._ufl_cell = ufl_cell
         self.vertices = vertices
         self.topology = {(tdim, 0): cells}
 
@@ -48,9 +51,10 @@ class Mesh(object):
 
     def _compute_connectivity_tdim_d_0(self, d):
         # Fetch data
-        tdim = self.reference_cell.get_dimension()
+        tdim = self.ufl_cell().topological_dimension()
         cell_vertex_connectivity = self.topology[(tdim, 0)]
-        ent_vert_conn_local = self.reference_cell.get_connectivity()[(d, 0)]
+        fiat_cell = FIAT.ufc_cell(self.ufl_cell())
+        ent_vert_conn_local = fiat_cell.get_connectivity()[(d, 0)]
         ent_per_cell = len(ent_vert_conn_local)
         vertices_per_ent = len(ent_vert_conn_local[0])
         num_cells = self.num_entities(tdim)
@@ -81,7 +85,7 @@ class Mesh(object):
 
     def _compute_boundary_facets(self):
         # Fetch data
-        tdim = self.reference_cell.get_dimension()
+        tdim = self.ufl_cell().topological_dimension()
         num_facets = self.num_entities(tdim-1);
         cell_facet_connectivity = self.get_connectivity(tdim, tdim-1)
 
@@ -90,6 +94,24 @@ class Mesh(object):
         counts = numpy.bincount(cell_facet_connectivity.flat)
         self.boundary_facets = set(f for f, count in enumerate(counts) if count==1)
 
+
+    def ufl_cell(self):
+        return self._ufl_cell
+
+
+    def ufl_coordinate_element(self):
+        cell = self.ufl_cell()
+        return ufl.VectorElement("P", cell, 1, dim=cell.geometric_dimension())
+
+
+    def ufl_id(self):
+        return id(self)
+
+
+    def ufl_domain(self):
+        return ufl.Mesh(self.ufl_coordinate_element(),
+                        ufl_id=self.ufl_id(),
+                        cargo=proxy(self))
 
 
 def build_unit_cube_mesh(nx, ny, nz):
@@ -123,9 +145,7 @@ def build_unit_cube_mesh(nx, ny, nz):
                     cells[c0+5,:] = [v0, v2, v6, v7]
     build_topology(nx, ny, nz, cells)
 
-    fiat_cell = FIAT.reference_element.ufc_cell("tetrahedron")
-
-    return Mesh(fiat_cell, vertices, cells)
+    return Mesh(ufl.tetrahedron, vertices, cells)
 
 
 
@@ -150,6 +170,4 @@ def build_unit_square_mesh(nx, ny):
                 cells[c0+1,:] = [v1, v2, v3]
     build_topology(nx, ny, cells)
 
-    fiat_cell = FIAT.reference_element.ufc_cell("triangle")
-
-    return Mesh(fiat_cell, vertices, cells)
+    return Mesh(ufl.triangle, vertices, cells)

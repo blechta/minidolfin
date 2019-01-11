@@ -22,7 +22,7 @@ from minidolfin.petsc import set_solver_package
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="minidolfin Helmholtz demo",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("-n", "--mesh-size", type=int, dest="n", default=256,
+parser.add_argument("-n", "--mesh-size", type=int, dest="n", default=25,
                     help="mesh resolution")
 parser.add_argument("-c", "--form-compiler", type=str, dest="form_compiler",
                     default="tsfc", choices=["tsfc", "ffc"],
@@ -75,9 +75,10 @@ A = create_matrix_from_csr((i, j))
 
 # Run and time assembly
 t = -timeit.default_timer()
-assemble(A, dofmap, a, form_compiler_parameters)
+A = assemble(dofmap, a, form_compiler_parameters)
 t += timeit.default_timer()
 print('Assembly time a: {}'.format(t))
+
 
 # Prepare solution and rhs vectors and apply boundary conditions
 x, b = A.createVecs()

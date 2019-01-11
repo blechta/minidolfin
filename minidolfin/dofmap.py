@@ -1,4 +1,4 @@
-import tsfc
+import ffc
 import numpy
 
 import collections
@@ -9,7 +9,7 @@ DofMap = collections.namedtuple("DofMap", "cell_dofs dim mesh element")
 
 
 def build_dofmap(element, mesh):
-    fiat_element = tsfc.fiatinterface.create_element(element)
+    fiat_element = ffc.fiatinterface.create_element(element)
 
     assert mesh.reference_cell == fiat_element.get_reference_element()
     tdim = mesh.reference_cell.get_dimension()
@@ -97,7 +97,7 @@ def interpolate_vertex_values(dofmap, x):
     cell_vertex_conn = dofmap.mesh.get_connectivity(tdim, 0)
 
     # Build local vertex-dof connectivity
-    fiat_element = tsfc.fiatinterface.create_element(dofmap.element)
+    fiat_element = ffc.fiatinterface.create_element(dofmap.element)
     vertex_dofs = fiat_element.entity_dofs()[0]
     dofs_per_vertex = len(vertex_dofs[0])
     assert dofs_per_vertex == 1, "just have to agree on ordering"

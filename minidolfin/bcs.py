@@ -1,4 +1,4 @@
-import tsfc
+import ffc
 import numpy
 
 
@@ -16,7 +16,7 @@ def build_dirichlet_dofs(dofmap, value):
     cell_dofs = dofmap.cell_dofs
 
     # Fetch data from reference element
-    fiat_element = tsfc.fiatinterface.create_element(dofmap.element)
+    fiat_element = ffc.fiatinterface.create_element(dofmap.element)
     facet_dofs = fiat_element.entity_closure_dofs()[tdim-1]
     mapping, = set(fiat_element.mapping())
 

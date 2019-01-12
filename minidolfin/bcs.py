@@ -34,6 +34,7 @@ def build_dirichlet_dofs(dofmap, value):
     elif mapping == "contravariant piola":
         def f_hat(B, b):
             Binv = numpy.linalg.inv(B)
+
             def _f_hat(xhat):
                 return Binv.dot(value(B.dot(xhat) + b))
             return _f_hat
@@ -42,9 +43,11 @@ def build_dirichlet_dofs(dofmap, value):
 
     # Turn dual basis nodes into interpolation operator
     dim = fiat_element.space_dimension()
+
     def interpolation_operator(f):
-        return numpy.fromiter((phi(f) for phi in fiat_element.get_dual_set().get_nodes()),
-                              numpy.double, count=dim)
+        return numpy.fromiter(
+            (phi(f) for phi in fiat_element.get_dual_set().get_nodes()),
+            numpy.double, count=dim)
 
     # Temporary
     bc_map = {}
@@ -60,8 +63,8 @@ def build_dirichlet_dofs(dofmap, value):
 
             # NB: This is affine transformation resulting from UFC
             #     simplex definition in FIAT
-            b = vertices[cell_vertex_conn[c, 0 ]]
-            B = ( vertices[cell_vertex_conn[c, 1:]] - b ).T
+            b = vertices[cell_vertex_conn[c, 0]]
+            B = (vertices[cell_vertex_conn[c, 1:]] - b).T
 
             # Interpolate Dirichlet datum
             dof_vals = interpolation_operator(f_hat(B, b))
@@ -69,8 +72,9 @@ def build_dirichlet_dofs(dofmap, value):
 
             # Figure out which facets and dofs are on boundary
             local_boundary_facets, = numpy.where(is_boundary)
-            local_boundary_dofs = numpy.fromiter(set(d for f in local_boundary_facets for d in facet_dofs[f]),
-                                                 dof_indices.dtype)
+            local_boundary_dofs = numpy.fromiter(
+                set(d for f in local_boundary_facets for d in facet_dofs[f]),
+                dof_indices.dtype)
 
             # Store dof-value pair into temporary
             for d in local_boundary_dofs:

@@ -28,8 +28,10 @@ def build_dofmap(element, mesh):
 
         # FIXME: Dofs on single entity are not consecutive?
         for k in range(dofs_per_entity):
-            entity_dofs = [dofs[k] for entity, dofs in sorted(local_dofs.items())]
-            cell_dofs[:, entity_dofs] = dofs_per_entity*connectivity + (offset+k)
+            entity_dofs = [dofs[k] for entity, dofs
+                           in sorted(local_dofs.items())]
+            cell_dofs[:, entity_dofs] = \
+                dofs_per_entity * connectivity + (offset + k)
 
         offset += dofs_per_entity*mesh.num_entities(dim)
 
@@ -89,7 +91,6 @@ def interpolate_vertex_values(dofmap, x):
 
     # Fetch data from mesh
     tdim = dofmap.mesh.reference_cell.get_dimension()
-    num_cells = dofmap.mesh.num_entities(tdim)
     num_vertices = dofmap.mesh.num_entities(0)
 
     # Fetch data from dofmap
@@ -106,6 +107,7 @@ def interpolate_vertex_values(dofmap, x):
 
     # Build vertex values
     vertex_values = numpy.ndarray((num_vertices,), dtype=numpy.double)
-    vertex_values[cell_vertex_conn[:]] = x[numpy.ascontiguousarray(cell_dofs[:, vertex_dofs])]
+    vertex_values[cell_vertex_conn[:]] = \
+        x[numpy.ascontiguousarray(cell_dofs[:, vertex_dofs])]
 
     return vertex_values

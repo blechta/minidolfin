@@ -49,13 +49,14 @@ for p in args.form_compiler_parameters:
     form_compiler_parameters[k] = v
 
 # Plane wave
-omega2 = 1.5**2 + 1**2
-u_exact = lambda x: math.cos(-1.5*x[0] + x[1])
+omega2 = 15**2 + 12**2
+u_exact = lambda x: math.cos(-15*x[0] + 12*x[1])
 
 # UFL form
-element = ufl.FiniteElement("P", ufl.triangle, 3)
+element = ufl.FiniteElement("P", ufl.triangle, 2)
 u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
 a = (ufl.inner(ufl.grad(u), ufl.grad(v)) - omega2*ufl.dot(u, v))*ufl.dx
+L = 200.0*v*ufl.dx
 
 # Build mesh
 mesh = build_unit_square_mesh(args.n, args.n)
@@ -72,8 +73,15 @@ A = assemble(dofmap, a, form_compiler_parameters)
 t += timeit.default_timer()
 print('Assembly time a: {}'.format(t))
 
+t = -timeit.default_timer()
+b = assemble(dofmap, L, None)
+t += timeit.default_timer()
+print('Assembly time L: {}'.format(t))
+
+t = -timeit.default_timer()
 # Prepare solution and rhs vectors and apply boundary conditions
-x, b = numpy.zeros(A.shape[1]), numpy.zeros(A.shape[0])
+x = numpy.zeros(A.shape[1])
+# b = numpy.zeros(A.shape[0])
 bc_dofs, bc_vals = build_dirichlet_dofs(dofmap, u_exact)
 
 # Set Dirichlet BCs
@@ -82,9 +90,11 @@ for i, v in zip(bc_dofs, bc_vals):
     A[i, i] = 1.0 # Set diagonal
     b[i] = v # Set RHS
 
+t += timeit.default_timer()
+print('Apply BCs: {}'.format(t))
+
 # Solve linear system
 import scipy.sparse.linalg
-#A.setOption(PETSc.Mat.Option.SPD, True)  # FIXME: Is that true?
 t = -timeit.default_timer()
 x = scipy.sparse.linalg.spsolve(A, b)
 t += timeit.default_timer()

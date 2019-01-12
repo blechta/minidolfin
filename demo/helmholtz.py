@@ -1,7 +1,7 @@
 import ufl
 import dijitso
 import ffc
-from petsc4py import PETSc
+import numpy
 from matplotlib import pyplot, tri
 
 import timeit
@@ -13,10 +13,8 @@ from minidolfin.dofmap import build_dofmap
 from minidolfin.dofmap import build_sparsity_pattern
 from minidolfin.dofmap import pattern_to_csr
 from minidolfin.dofmap import interpolate_vertex_values
-from minidolfin.petsc import create_matrix_from_csr
 from minidolfin.assembling import assemble
 from minidolfin.bcs import build_dirichlet_dofs
-from minidolfin.petsc import set_solver_package
 
 
 # Parse command-line arguments
@@ -68,37 +66,27 @@ print('Number cells: {}'.format(mesh.num_entities(tdim)))
 dofmap = build_dofmap(element, mesh)
 print('Number dofs: {}'.format(dofmap.dim))
 
-# Build sparsity pattern and create matrix
-pattern = build_sparsity_pattern(dofmap)
-i, j = pattern_to_csr(pattern)
-A = create_matrix_from_csr((i, j))
-
 # Run and time assembly
 t = -timeit.default_timer()
 A = assemble(dofmap, a, form_compiler_parameters)
 t += timeit.default_timer()
 print('Assembly time a: {}'.format(t))
 
-
 # Prepare solution and rhs vectors and apply boundary conditions
-x, b = A.createVecs()
+x, b = numpy.zeros(A.shape[1]), numpy.zeros(A.shape[0])
 bc_dofs, bc_vals = build_dirichlet_dofs(dofmap, u_exact)
-x.setValues(bc_dofs, bc_vals)
-A.zeroRowsColumns(bc_dofs, diag=1, x=x, b=b)
+
+# Set Dirichlet BCs
+for i, v in zip(bc_dofs, bc_vals):
+    A[i, :] *= 0.0 # Clear row
+    A[i, i] = 1.0 # Set diagonal
+    b[i] = v # Set RHS
 
 # Solve linear system
-ksp = PETSc.KSP().create(A.comm)
-ksp.setType(PETSc.KSP.Type.PREONLY)
-ksp.pc.setType(PETSc.PC.Type.CHOLESKY)
-set_solver_package(ksp.pc, "mumps")
+import scipy.sparse.linalg
 #A.setOption(PETSc.Mat.Option.SPD, True)  # FIXME: Is that true?
 t = -timeit.default_timer()
-ksp.setOperators(A)
-ksp.setUp()
-t += timeit.default_timer()
-print('Setup linear solver time: {}'.format(t))
-t = -timeit.default_timer()
-ksp.solve(b, x)
+x = scipy.sparse.linalg.spsolve(A, b)
 t += timeit.default_timer()
 print('Solve linear system time: {}'.format(t))
 

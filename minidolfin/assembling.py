@@ -44,38 +44,44 @@ def assemble(dofmap, form, form_compiler_parameters=None):
     # Prepare coordinates temporary
     num_vertices_per_cell = cells.shape[1]
     gdim = vertices.shape[1]
+    ffi = cffi.FFI()
 
+    @numba.jit(nopython=True)
     def _assemble(assembly_kernel, cells, vertices, cell_dofs):
         nrows = ncols = cell_dofs.shape[1]
+        ncells = cells.shape[0]
 
         # Loop over cells
-        ci = []
-        cj = []
-        val = []
-        for c in range(cells.shape[0]):
+        ci = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
+        cj = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
+        val = numpy.zeros(nrows*ncols*ncells, dtype=numpy.float64)
+        n = 0
+        for c in range(ncells):
 
             # Assemble cell tensor
             A = numpy.zeros(element_dims, dtype=numpy.float64)
-            w = numpy.array([], dtype=numpy.float64)
-            ffi = cffi.FFI()
-            coords = numpy.array(vertices[cells[c]], dtype=numpy.float64)
-            assembly_kernel(ffi.cast('double *', A.ctypes.data),
-                            ffi.cast('double *', w.ctypes.data),
-                            ffi.cast('double *', coords.ctypes.data), 0)
+            w = numpy.array([0], dtype=numpy.float64)
+            coords = numpy.empty((cells.shape[1], vertices.shape[1]))
+            for i, q in enumerate(cells[c]):
+                coords[i, :] = vertices[q]
+#            coords = numpy.array(vertices[cells[c]], dtype=numpy.float64)
+            assembly_kernel(ffi.from_buffer(A), #cast('double *', A.ctypes.data),
+                            ffi.from_buffer(w), # cast('double *', w.ctypes.data),
+                            ffi.from_buffer(coords), 0) # cast('double *', coords.ctypes.data), 0)
 
             # Add to global tensor
             rows = cols = cell_dofs[c]
             for i, ig in enumerate(rows):
                 for j, jg in enumerate(cols):
-                    ci += [ig]
-                    cj += [jg]
-                    val += [A[i, j]]
+                    ci[n] = ig
+                    cj[n] = jg
+                    val[n] = A[i, j]
+                    n += 1
+
         return ci, cj, val
 
     # Call assembly loop
     ci, cj, val = _assemble(assembly_kernel, cells, vertices, cell_dofs)
-
-    print(len(ci), len(cj), len(val))
 
     mat = scipy.sparse.coo_matrix((val, (ci, cj)))
 

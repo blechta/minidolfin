@@ -1,6 +1,6 @@
 import ffc
 import numpy
-
+import scipy.sparse
 
 def build_dirichlet_dofs(dofmap, value):
 
@@ -86,3 +86,18 @@ def build_dirichlet_dofs(dofmap, value):
     vals = numpy.fromiter(bc_map.values(), numpy.double, count=len(bc_map))
 
     return dofs, vals
+
+
+def bc_apply(dofs, vals, A, b):
+    """ Apply BCs in dofs, vals to CSR matrix A and RHS b. """
+
+    assert isinstance(A, scipy.sparse.csr_matrix)
+
+    # Clear rows and set diagonal
+    for i in dofs:
+        A.data[A.indptr[i]:A.indptr[i+1]] = 0.0
+        A[i, i] = 1.0
+
+    # Set RHS
+    for i, v in zip(dofs, vals):
+        b[i] = v

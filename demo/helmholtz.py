@@ -13,6 +13,7 @@ from minidolfin.dofmap import build_dofmap
 from minidolfin.dofmap import interpolate_vertex_values
 from minidolfin.assembling import assemble
 from minidolfin.bcs import build_dirichlet_dofs
+from minidolfin.bcs import bc_apply
 
 
 # Parse command-line arguments
@@ -47,7 +48,7 @@ for p in args.form_compiler_parameters:
     form_compiler_parameters[k] = v
 
 # Plane wave
-omega2 = 15**2 + 12**2
+omega2 = 15**2 + 11**2
 
 
 def u_exact(x):
@@ -58,7 +59,7 @@ def u_exact(x):
 element = ufl.FiniteElement("P", ufl.triangle, 3)
 u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
 a = (ufl.inner(ufl.grad(u), ufl.grad(v)) - omega2*ufl.dot(u, v))*ufl.dx
-L = 200.0*v*ufl.dx
+L = 0.0001*v*ufl.dx
 
 # Build mesh
 mesh = build_unit_square_mesh(args.n, args.n)
@@ -89,14 +90,7 @@ x = numpy.zeros(A.shape[1])
 t = -timeit.default_timer()
 bc_dofs, bc_vals = build_dirichlet_dofs(dofmap, u_exact)
 
-# Clear rows and set diagonal
-for i in bc_dofs:
-    A.data[A.indptr[i]:A.indptr[i+1]] = 0.0
-    A[i, i] = 1.0
-
-# Set RHS
-for i, v in zip(bc_dofs, bc_vals):
-    b[i] = v
+bc_apply(bc_dofs, bc_vals, A, b)
 
 t += timeit.default_timer()
 print('Apply BCs: {}'.format(t))

@@ -153,3 +153,51 @@ def build_unit_square_mesh(nx, ny):
     fiat_cell = FIAT.reference_element.ufc_cell("triangle")
 
     return Mesh(fiat_cell, vertices, cells)
+
+
+def get_mesh_from_url(url):
+    """ Read a 2D triangle mesh in XDMF XML format (not HDF5) from a URL"""
+    try:
+        import requests
+        import xml.etree.ElementTree as ET
+    except ImportError:
+        raise("Missing required library")
+
+    r = requests.get(url)
+    if r.status_code != 200:
+        raise IOError("Cannot read from URL")
+
+    et = ET.fromstring(r.text)
+    assert(et.tag == 'Xdmf')
+    assert(et[0].tag == 'Domain')
+    assert(et[0][0].tag == 'Grid')
+    grid = et[0][0]
+
+    # Get topology array
+    topology = grid.find('Topology')
+    assert(topology.attrib['TopologyType'] == 'Triangle')
+    tdims = numpy.fromstring(topology[0].attrib['Dimensions'], sep=' ', dtype='int')
+    nptopo = numpy.fromstring(topology[0].text, sep=' ', dtype='int').reshape(tdims)
+
+    # Get geometry array
+    geometry = grid.find('Geometry')
+    assert(geometry.attrib['GeometryType'] == 'XY')
+    gdims = numpy.fromstring(geometry[0].attrib['Dimensions'], sep=' ', dtype='int')
+    npgeom = numpy.fromstring(geometry[0].text, sep=' ', dtype='float').reshape(gdims)
+
+    # Find all attributes and put them in a list
+    attrlist = grid.findall('Attribute')
+    data_all = []
+    for attr in attrlist:
+        adims = numpy.fromstring(attr[0].attrib['Dimensions'], sep=' ', dtype='int')
+        npattr = attr.attrib
+        npattr['value'] = numpy.fromstring(attr[0].text, sep=' ', dtype='int')
+        data_all.append(npattr)
+
+    fiat_cell = FIAT.reference_element.ufc_cell("triangle")
+    mesh = Mesh(fiat_cell, npgeom, nptopo)
+
+    # Attach any data
+    mesh.data = data_all
+
+    return mesh

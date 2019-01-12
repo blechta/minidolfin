@@ -1,8 +1,8 @@
 import ufl
-import dijitso
 import ffc
 import numpy
 from matplotlib import pyplot, tri
+import scipy.sparse.linalg
 
 import timeit
 import math
@@ -10,17 +10,16 @@ import argparse
 
 from minidolfin.meshing import build_unit_square_mesh
 from minidolfin.dofmap import build_dofmap
-from minidolfin.dofmap import build_sparsity_pattern
-from minidolfin.dofmap import pattern_to_csr
 from minidolfin.dofmap import interpolate_vertex_values
 from minidolfin.assembling import assemble
 from minidolfin.bcs import build_dirichlet_dofs
 
 
 # Parse command-line arguments
-parser = argparse.ArgumentParser(description="minidolfin Helmholtz demo",
+parser = argparse.ArgumentParser(
+    description="minidolfin Helmholtz demo",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("-n", "--mesh-size", type=int, dest="n", default=25,
+parser.add_argument("-n", "--mesh-size", type=int, dest="n", default=128,
                     help="mesh resolution")
 parser.add_argument("-c", "--form-compiler", type=str, dest="form_compiler",
                     default="tsfc", choices=["tsfc", "ffc"],
@@ -37,7 +36,6 @@ args = parser.parse_args()
 
 # Make dijitso talk to us
 if args.debug:
-    dijitso.set_log_level("DEBUG")
     ffc.logger.setLevel("DEBUG")
 
 # Build form compiler parameters
@@ -50,10 +48,14 @@ for p in args.form_compiler_parameters:
 
 # Plane wave
 omega2 = 15**2 + 12**2
-u_exact = lambda x: math.cos(-15*x[0] + 12*x[1])
+
+
+def u_exact(x):
+    return math.cos(-15*x[0] + 12*x[1])
+
 
 # UFL form
-element = ufl.FiniteElement("P", ufl.triangle, 2)
+element = ufl.FiniteElement("P", ufl.triangle, 3)
 u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
 a = (ufl.inner(ufl.grad(u), ufl.grad(v)) - omega2*ufl.dot(u, v))*ufl.dx
 L = 200.0*v*ufl.dx
@@ -78,23 +80,28 @@ b = assemble(dofmap, L, None)
 t += timeit.default_timer()
 print('Assembly time L: {}'.format(t))
 
-t = -timeit.default_timer()
 # Prepare solution and rhs vectors and apply boundary conditions
 x = numpy.zeros(A.shape[1])
 # b = numpy.zeros(A.shape[0])
-bc_dofs, bc_vals = build_dirichlet_dofs(dofmap, u_exact)
 
 # Set Dirichlet BCs
+
+t = -timeit.default_timer()
+bc_dofs, bc_vals = build_dirichlet_dofs(dofmap, u_exact)
+
+# Clear rows and set diagonal
+for i in bc_dofs:
+    A.data[A.indptr[i]:A.indptr[i+1]] = 0.0
+    A[i, i] = 1.0
+
+# Set RHS
 for i, v in zip(bc_dofs, bc_vals):
-    A[i, :] *= 0.0 # Clear row
-    A[i, i] = 1.0 # Set diagonal
-    b[i] = v # Set RHS
+    b[i] = v
 
 t += timeit.default_timer()
 print('Apply BCs: {}'.format(t))
 
 # Solve linear system
-import scipy.sparse.linalg
 t = -timeit.default_timer()
 x = scipy.sparse.linalg.spsolve(A, b)
 t += timeit.default_timer()

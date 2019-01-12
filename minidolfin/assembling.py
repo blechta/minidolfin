@@ -108,4 +108,4 @@ def assemble(dofmap, form, form_compiler_parameters=None):
         vec = _assemble_linear(assembly_kernel,
                                cells, vertices, cell_dofs, dofmap.dim)
         return vec
-    raise RuntimeError("Something went wrong (not linear or bilinear).")
+    raise RuntimeError("Form is neither linear nor bilinear.")

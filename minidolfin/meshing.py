@@ -176,20 +176,25 @@ def get_mesh_from_url(url):
     # Get topology array
     topology = grid.find('Topology')
     assert(topology.attrib['TopologyType'] == 'Triangle')
-    tdims = numpy.fromstring(topology[0].attrib['Dimensions'], sep=' ', dtype='int')
-    nptopo = numpy.fromstring(topology[0].text, sep=' ', dtype='int').reshape(tdims)
+    tdims = numpy.fromstring(topology[0].attrib['Dimensions'],
+                             sep=' ', dtype='int')
+    nptopo = numpy.fromstring(topology[0].text,
+                              sep=' ', dtype='int').reshape(tdims)
 
     # Get geometry array
     geometry = grid.find('Geometry')
     assert(geometry.attrib['GeometryType'] == 'XY')
-    gdims = numpy.fromstring(geometry[0].attrib['Dimensions'], sep=' ', dtype='int')
-    npgeom = numpy.fromstring(geometry[0].text, sep=' ', dtype='float').reshape(gdims)
+    gdims = numpy.fromstring(geometry[0].attrib['Dimensions'],
+                             sep=' ', dtype='int')
+    npgeom = numpy.fromstring(geometry[0].text,
+                              sep=' ', dtype='float').reshape(gdims)
 
     # Find all attributes and put them in a list
     attrlist = grid.findall('Attribute')
     data_all = []
     for attr in attrlist:
-        adims = numpy.fromstring(attr[0].attrib['Dimensions'], sep=' ', dtype='int')
+        #        adims = numpy.fromstring(attr[0].attrib['Dimensions'],
+        #                        sep=' ', dtype='int')
         npattr = attr.attrib
         npattr['value'] = numpy.fromstring(attr[0].text, sep=' ', dtype='int')
         data_all.append(npattr)

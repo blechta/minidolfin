@@ -1,6 +1,9 @@
 
+import pyamg
 import ufl
 import numpy
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import scipy.sparse.linalg
 from minidolfin.meshing import get_mesh_from_url
@@ -17,6 +20,10 @@ f = ufl.Coefficient(element)
 a = ufl.inner(ufl.grad(u), ufl.grad(v))*ufl.dx
 L = ufl.cos(f)*v*ufl.dx
 dofmap = build_dofmap(element, mesh)
+
+A, b = assemble(dofmap, [a, L], None)
+
+
 A = assemble(dofmap, a, None)
 b = assemble(dofmap, L, None)
 
@@ -26,8 +33,15 @@ def u_bound(x):
 bc_dofs, bc_vals = build_dirichlet_dofs(dofmap, u_bound)
 bc_apply(bc_dofs, bc_vals, A, b)
 
-x = scipy.sparse.linalg.spsolve(A, b)
+ml = pyamg.ruge_stuben_solver(A)
+print(ml)
+
+# x = scipy.sparse.linalg.spsolve(A, b)
+x = ml.solve(b, tol=1e-10)
+print("residual: ", numpy.linalg.norm(b-A*x))
+
+print(x.min(), x.max())
 
 vertex_values = interpolate_vertex_values(dofmap, x)
 plot(mesh, vertex_values)
-plt.show()
+plt.savefig('a.pdf')

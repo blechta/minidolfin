@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+import matplotlib.tri as tri
+
 
 def plot(mesh, *args, **kwargs):
     """ Plot a mesh with matplotlib, possibly with associated data,
@@ -7,16 +9,16 @@ def plot(mesh, *args, **kwargs):
     # FIXME: check keys of mesh contain geometry and topology
     tdim = mesh.reference_cell.get_dimension()
     geom, topo = mesh.vertices, mesh.topology[(tdim, 0)]
-    x = geom[:,0]
-    y = geom[:,1]
+    x = geom[:, 0]
+    y = geom[:, 1]
 
     plt.gca(aspect='equal')
 
     if args:
         data = args[0]
-        if len(data)==len(geom):
+        if len(data) == len(geom):
             plt.tricontourf(x, y, topo, data, 40, **kwargs)
-        elif len(data)==len(topo):
+        elif len(data) == len(topo):
             tr = tri.Triangulation(x, y, topo)
             plt.tripcolor(tr, data, **kwargs)
         else:
@@ -28,9 +30,9 @@ def plot(mesh, *args, **kwargs):
     xmin = x.min()
     ymax = y.max()
     ymin = y.min()
-    dx = 0.1*(xmax - xmin)
-    dy = 0.1*(ymax - ymin)
-    plt.xlim(xmin-dx, xmax+dx)
-    plt.ylim(ymin-dy, ymax+dy)
+    dx = 0.1 * (xmax - xmin)
+    dy = 0.1 * (ymax - ymin)
+    plt.xlim(xmin - dx, xmax + dx)
+    plt.ylim(ymin - dy, ymax + dy)
 
     return

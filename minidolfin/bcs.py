@@ -2,6 +2,7 @@ import ffc
 import numpy
 import scipy.sparse
 
+
 def build_dirichlet_dofs(dofmap, value):
 
     # Fetch mesh data

@@ -7,22 +7,22 @@ import numpy
 import numba
 
 
-def jit_compile_form(form, params):
+def jit_compile_forms(forms, params):
 
     compiled_forms, module = ffc.codegeneration.jit.compile_forms(
-        [form], parameters={'scalar_type': 'double'})
+        forms, parameters={'scalar_type': 'double'})
 
-    for f, compiled_f in zip([form], compiled_forms):
+    for f, compiled_f in zip(forms, compiled_forms):
         assert compiled_f.rank == len(f.arguments())
 
-    return compiled_forms[0][0]
+    return compiled_forms
 
 
 def assemble(dofmap, form, form_compiler_parameters=None):
 
     # JIT compile UFL form into ctypes function
-    assembly_kernel = jit_compile_form(form, form_compiler_parameters) \
-        .create_default_cell_integral().tabulate_tensor
+    module = jit_compile_forms([form], form_compiler_parameters)[0][0]
+    assembly_kernel = module.create_default_cell_integral().tabulate_tensor
 
     # Fetch data
     tdim = dofmap.mesh.reference_cell.get_dimension()
@@ -109,3 +109,75 @@ def assemble(dofmap, form, form_compiler_parameters=None):
                                cells, vertices, cell_dofs, dofmap.dim)
         return vec
     raise RuntimeError("Form is neither linear nor bilinear.")
+
+
+def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters):
+    """ Assemble LHS and RHS together """
+    # JIT compile UFL form into ctypes functions
+    module = jit_compile_forms([LHSform, RHSform], form_compiler_parameters)
+    LHS_kernel = module[0][0].create_default_cell_integral().tabulate_tensor
+    RHS_kernel = module[1][0].create_default_cell_integral().tabulate_tensor
+
+    # Fetch data
+    tdim = dofmap.mesh.reference_cell.get_dimension()
+    cells = dofmap.mesh.get_connectivity(tdim, 0)
+    vertices = dofmap.mesh.vertices
+    cell_dofs = dofmap.cell_dofs
+
+    # Prepare cell tensor temporary
+    elements = tuple(arg.ufl_element() for arg in LHSform.arguments())
+    fiat_elements = map(ffc.fiatinterface.create_element, elements)
+    element_dims = tuple(fe.space_dimension() for fe in fiat_elements)
+
+    ffi = cffi.FFI()
+
+    @numba.jit(nopython=True)
+    def _assemble(LHS_kernel, RHS_kernel, cells, vertices, cell_dofs, dim):
+        nrows = ncols = cell_dofs.shape[1]
+        ncells = cells.shape[0]
+
+        # Storage for Vector
+        vec = numpy.zeros(dim, dtype=numpy.float64)
+        # Storage for COO Matrix
+        ci = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
+        cj = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
+        val = numpy.zeros(nrows*ncols*ncells, dtype=numpy.float64)
+
+        n = 0
+        # Temporary for cell geometry
+        coords = numpy.empty((cells.shape[1], vertices.shape[1]))
+        for c in range(ncells):
+
+            # Assemble cell vector and matrix
+            b = numpy.zeros(element_dims[0], dtype=numpy.float64)
+            A = numpy.zeros(element_dims, dtype=numpy.float64)
+            wA = numpy.array([0], dtype=numpy.float64)
+            wb = numpy.array([0], dtype=numpy.float64)
+            for i, q in enumerate(cells[c]):
+                coords[i, :] = vertices[q]
+
+            LHS_kernel(ffi.from_buffer(A),
+                       ffi.from_buffer(wA),
+                       ffi.from_buffer(coords), 0)
+
+            RHS_kernel(ffi.from_buffer(b),
+                       ffi.from_buffer(wb),
+                       ffi.from_buffer(coords), 0)
+
+            # Add to global vector and matrix
+            rows = cols = cell_dofs[c]
+            for i, ig in enumerate(rows):
+                vec[ig] += b[i]
+                for j, jg in enumerate(cols):
+                    ci[n] = ig
+                    cj[n] = jg
+                    val[n] = A[i, j]
+                    n += 1
+
+        return ci, cj, val, vec
+
+    # Call assembly loop
+    ci, cj, val, vec = _assemble(LHS_kernel, RHS_kernel,
+                                 cells, vertices, cell_dofs, dofmap.dim)
+    mat = scipy.sparse.coo_matrix((val, (ci, cj)))
+    return mat.tocsr(), vec

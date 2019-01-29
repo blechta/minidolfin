@@ -132,11 +132,13 @@ def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters):
     ffi = cffi.FFI()
 
     @numba.jit(nopython=True)
-    def _assemble(LHS_kernel, RHS_kernel, cells, vertices, cell_dofs, dim):
+    def _assemble(kernels, cells, vertices, cell_dofs, bcs, bcvals):
+        dim = bcs.shape[0]
+        LHS_kernel, RHS_kernel = kernels
         nrows = ncols = cell_dofs.shape[1]
         ncells = cells.shape[0]
 
-        # Storage for Vector
+        # Storage for Vector.
         vec = numpy.zeros(dim, dtype=numpy.float64)
         # Storage for COO Matrix
         ci = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
@@ -164,20 +166,39 @@ def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters):
                        ffi.from_buffer(wb),
                        ffi.from_buffer(coords), 0)
 
-            # Add to global vector and matrix
             rows = cols = cell_dofs[c]
-            for i, ig in enumerate(rows):
-                vec[ig] += b[i]
-                for j, jg in enumerate(cols):
-                    ci[n] = ig
-                    cj[n] = jg
+
+            # Set Dirichlet BCs
+            for i, iglobal in enumerate(rows):
+                if bcs[iglobal]:
+                    A[i, :] = 0.0
+                    b[:] -= A[:, i]*bcvals[iglobal]
+                    A[:, i] = 0.0
+                    A[i, i] = 1.0
+                    b[i] = bcvals[iglobal]
+
+            # Add to global vector and matrix
+            for i, iglobal in enumerate(rows):
+                vec[iglobal] += b[i]
+                for j, jglobal in enumerate(cols):
+                    ci[n] = iglobal
+                    cj[n] = jglobal
                     val[n] = A[i, j]
                     n += 1
 
         return ci, cj, val, vec
 
+    # Mark any dofs which have BCs. FIXME: better way?
+    bcs = numpy.zeros(dofmap.dim, dtype=bool)
+    bcvals = numpy.zeros(dofmap.dim, dtype=numpy.float64)
+    for dof, val in bc_map.items():
+        bcs[dof] = True
+        bcvals[dof] = val
+
     # Call assembly loop
-    ci, cj, val, vec = _assemble(LHS_kernel, RHS_kernel,
-                                 cells, vertices, cell_dofs, dofmap.dim)
+    ci, cj, val, vec = _assemble((LHS_kernel, RHS_kernel),
+                                 cells, vertices,
+                                 cell_dofs, bcs, bcvals)
+
     mat = scipy.sparse.coo_matrix((val, (ci, cj)))
     return mat.tocsr(), vec

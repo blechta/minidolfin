@@ -34,6 +34,7 @@ Authors
 =======
 
 * `@blechta <https://github.com/blechta>`_
+* `@chrisrichardson <https://github.com/chrisrichardson>`_
 * `@w1th0utnam3 <https://github.com/w1th0utnam3>`_
 
 License

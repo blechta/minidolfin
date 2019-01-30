@@ -12,9 +12,11 @@ from minidolfin.assembling import assemble, symass
 from minidolfin.bcs import build_dirichlet_dofs, bc_apply
 from minidolfin.plot import plot
 
-mesh = read_mesh('https://raw.githubusercontent.com/chrisrichardson/meshdata/master/data/rectangle_mesh.xdmf')
+mesh = read_mesh('tet_cube.xdmf')
 
-element = ufl.FiniteElement("P", ufl.triangle, 1)
+# mesh = get_mesh_from_url('tet_cube.xdmf')
+
+element = ufl.FiniteElement("P", ufl.tetrahedron, 1)
 u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
 f = ufl.Coefficient(element)
 a = ufl.inner(ufl.grad(u), ufl.grad(v))*ufl.dx
@@ -56,5 +58,5 @@ print('solve time = ', elapsed)
 print(x.min(), x.max())
 
 vertex_values = interpolate_vertex_values(dofmap, x)
-plot(mesh, vertex_values)
-plt.savefig('a.png')
+# plot(mesh, vertex_values)
+# plt.savefig('a.pdf')

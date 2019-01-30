@@ -1,3 +1,5 @@
+
+import xml.etree.ElementTree as ET
 import FIAT
 import numpy
 import numba
@@ -155,19 +157,26 @@ def build_unit_square_mesh(nx, ny):
     return Mesh(fiat_cell, vertices, cells)
 
 
-def get_mesh_from_url(url):
-    """ Read a 2D triangle mesh in XDMF XML format (not HDF5) from a URL"""
-    try:
-        import requests
-        import xml.etree.ElementTree as ET
-    except ImportError:
-        raise("Missing required library")
+def read_mesh(url):
+    """ Read a triangular or tetrahedral mesh in XDMF
+        XML format (not HDF5) from a URL or file"""
 
-    r = requests.get(url)
-    if r.status_code != 200:
-        raise IOError("Cannot read from URL")
+    if (url[:4] == 'http'):
+        try:
+            import requests
+        except ImportError:
+            raise("Missing required 'requests' library")
 
-    et = ET.fromstring(r.text)
+        r = requests.get(url)
+        if r.status_code != 200:
+            raise IOError("Cannot read from URL")
+        rtext = r.text
+    else:
+        # Just read from file
+        with open(url) as fd:
+            rtext = fd.read()
+
+    et = ET.fromstring(rtext)
     assert(et.tag == 'Xdmf')
     assert(et[0].tag == 'Domain')
     assert(et[0][0].tag == 'Grid')
@@ -175,17 +184,23 @@ def get_mesh_from_url(url):
 
     # Get topology array
     topology = grid.find('Topology')
-    assert(topology.attrib['TopologyType'] == 'Triangle')
+    cell_type = topology.attrib['TopologyType'].lower()
+    assert(cell_type in ['triangle', 'tetrahedron'])
     tdims = numpy.fromstring(topology[0].attrib['Dimensions'],
                              sep=' ', dtype='int')
+    assert(topology[0].attrib['Format'] == 'XML')
     nptopo = numpy.fromstring(topology[0].text,
                               sep=' ', dtype='int').reshape(tdims)
 
+    for i in range(tdims[0]):
+        nptopo[i, :] = sorted(nptopo[i, :])
+
     # Get geometry array
     geometry = grid.find('Geometry')
-    assert(geometry.attrib['GeometryType'] == 'XY')
+    assert(geometry.attrib['GeometryType'] in ['XY', 'XYZ'])
     gdims = numpy.fromstring(geometry[0].attrib['Dimensions'],
                              sep=' ', dtype='int')
+    assert(geometry[0].attrib['Format'] == 'XML')
     npgeom = numpy.fromstring(geometry[0].text,
                               sep=' ', dtype='float').reshape(gdims)
 
@@ -196,10 +211,11 @@ def get_mesh_from_url(url):
         #        adims = numpy.fromstring(attr[0].attrib['Dimensions'],
         #                        sep=' ', dtype='int')
         npattr = attr.attrib
+        assert(attr[0].attrib['Format'] == 'XML')
         npattr['value'] = numpy.fromstring(attr[0].text, sep=' ', dtype='int')
         data_all.append(npattr)
 
-    fiat_cell = FIAT.reference_element.ufc_cell("triangle")
+    fiat_cell = FIAT.reference_element.ufc_cell(cell_type)
     mesh = Mesh(fiat_cell, npgeom, nptopo)
 
     # Attach any data

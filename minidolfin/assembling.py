@@ -6,11 +6,18 @@ import scipy.sparse
 import numpy
 import numba
 
+def c_to_numpy(ctype):
+    c2numpy = {'double': numpy.float64,
+               'float': numpy.float32,
+               'complex double': numpy.complex128,
+               'complex float': numpy.complex64,
+               'long double': numpy.longdouble}
+    return c2numpy.get(ctype)
 
 def jit_compile_forms(forms, params):
 
     compiled_forms, module = ffc.codegeneration.jit.compile_forms(
-        forms, parameters={'scalar_type': 'double'})
+        forms, parameters=params)
 
     for f, compiled_f in zip(forms, compiled_forms):
         assert compiled_f.rank == len(f.arguments())
@@ -18,7 +25,7 @@ def jit_compile_forms(forms, params):
     return compiled_forms
 
 
-def assemble(dofmap, form, form_compiler_parameters=None):
+def assemble(dofmap, form, form_compiler_parameters={}):
 
     # JIT compile UFL form into ctypes function
     module = jit_compile_forms([form], form_compiler_parameters)[0][0]
@@ -45,14 +52,15 @@ def assemble(dofmap, form, form_compiler_parameters=None):
         # Loop over cells
         ci = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
         cj = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
-        val = numpy.zeros(nrows*ncols*ncells, dtype=numpy.float64)
+        val = numpy.zeros(nrows*ncols*ncells, dtype=numpy.float32)
         n = 0
-        coords = numpy.empty((cells.shape[1], vertices.shape[1]))
+        coords = numpy.empty((cells.shape[1], vertices.shape[1]),
+                             dtype=numpy.float64)
         for c in range(ncells):
 
             # Assemble cell tensor
-            A = numpy.zeros(element_dims, dtype=numpy.float64)
-            w = numpy.array([0], dtype=numpy.float64)
+            A = numpy.zeros(element_dims, dtype=numpy.float32)
+            w = numpy.array([0], dtype=numpy.float32)
             for i, q in enumerate(cells[c]):
                 coords[i, :] = vertices[q]
 
@@ -75,15 +83,16 @@ def assemble(dofmap, form, form_compiler_parameters=None):
     def _assemble_linear(assembly_kernel, cells, vertices, cell_dofs, dim):
         ncells = cells.shape[0]
 
-        vec = numpy.zeros(dim, dtype=numpy.float64)
-        coords = numpy.empty((cells.shape[1], vertices.shape[1]))
+        vec = numpy.zeros(dim, dtype=numpy.float32)
+        coords = numpy.empty((cells.shape[1], vertices.shape[1]),
+                             dtype=numpy.float64)
 
         # Loop over cells
         for c in range(ncells):
 
             # Assemble cell tensor
-            b = numpy.zeros(element_dims[0], dtype=numpy.float64)
-            w = numpy.array([0], dtype=numpy.float64)
+            b = numpy.zeros(element_dims[0], dtype=numpy.float32)
+            w = numpy.array([0], dtype=numpy.float32)
             for i, q in enumerate(cells[c]):
                 coords[i, :] = vertices[q]
             assembly_kernel(ffi.from_buffer(b),
@@ -111,8 +120,13 @@ def assemble(dofmap, form, form_compiler_parameters=None):
     raise RuntimeError("Form is neither linear nor bilinear.")
 
 
-def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters):
+def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters={}):
     """ Assemble LHS and RHS together """
+
+    form_compiler_parameters['scalar_type'] = form_compiler_parameters.get('scalar_type', 'double')
+    scalar_type = c_to_numpy(form_compiler_parameters['scalar_type'])
+
+
     # JIT compile UFL form into ctypes functions
     module = jit_compile_forms([LHSform, RHSform], form_compiler_parameters)
     LHS_kernel = module[0][0].create_default_cell_integral().tabulate_tensor
@@ -139,22 +153,23 @@ def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters):
         ncells = cells.shape[0]
 
         # Storage for Vector.
-        vec = numpy.zeros(dim, dtype=numpy.float64)
+        vec = numpy.zeros(dim, dtype=scalar_type)
         # Storage for COO Matrix
         ci = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
         cj = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
-        val = numpy.zeros(nrows*ncols*ncells, dtype=numpy.float64)
+        val = numpy.zeros(nrows*ncols*ncells, dtype=scalar_type)
 
         n = 0
         # Temporary for cell geometry
-        coords = numpy.empty((cells.shape[1], vertices.shape[1]))
+        coords = numpy.empty((cells.shape[1], vertices.shape[1]),
+                             dtype=numpy.float64)
         for c in range(ncells):
 
             # Assemble cell vector and matrix
-            b = numpy.zeros(element_dims[0], dtype=numpy.float64)
-            A = numpy.zeros(element_dims, dtype=numpy.float64)
-            wA = numpy.array([0], dtype=numpy.float64)
-            wb = numpy.array([0], dtype=numpy.float64)
+            b = numpy.zeros(element_dims[0], dtype=scalar_type)
+            A = numpy.zeros(element_dims, dtype=scalar_type)
+            wA = numpy.array([0], dtype=scalar_type)
+            wb = numpy.array([0], dtype=scalar_type)
             for i, q in enumerate(cells[c]):
                 coords[i, :] = vertices[q]
 
@@ -168,7 +183,7 @@ def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters):
 
             rows = cols = cell_dofs[c]
 
-            # Set Dirichlet BCs
+            # Set Dirichlet BCs symmetrically
             for i, iglobal in enumerate(rows):
                 if bcs[iglobal]:
                     A[i, :] = 0.0
@@ -190,7 +205,7 @@ def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters):
 
     # Mark any dofs which have BCs. FIXME: better way?
     bcs = numpy.zeros(dofmap.dim, dtype=bool)
-    bcvals = numpy.zeros(dofmap.dim, dtype=numpy.float64)
+    bcvals = numpy.zeros(dofmap.dim, dtype=scalar_type)
     for dof, val in bc_map.items():
         bcs[dof] = True
         bcvals[dof] = val

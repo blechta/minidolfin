@@ -33,7 +33,7 @@ elapsed = time.time() - t
 print('BC time = ', elapsed)
 
 t = time.time()
-A, b = symass(dofmap, a, L, bc_map, None)
+A, b = symass(dofmap, a, L, bc_map, {'scalar_type': 'float'})
 # A = assemble(dofmap, a, None)
 # b = assemble(dofmap, L, None)
 elapsed = time.time() - t
@@ -46,8 +46,8 @@ ml = pyamg.ruge_stuben_solver(A)
 print(ml)
 
 t = time.time()
-# x = scipy.sparse.linalg.spsolve(A, b)
-x = ml.solve(b, tol=1e-16)
+x = scipy.sparse.linalg.spsolve(A, b)
+# x = ml.solve(b, tol=1e-16)
 print("residual: ", numpy.linalg.norm(b-A*x))
 
 elapsed = time.time() - t

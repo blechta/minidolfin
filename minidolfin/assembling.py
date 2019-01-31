@@ -27,6 +27,9 @@ def jit_compile_forms(forms, params):
 
 def assemble(dofmap, form, form_compiler_parameters={}):
 
+    form_compiler_parameters['scalar_type'] = form_compiler_parameters.get('scalar_type', 'double')
+    scalar_type = c_to_numpy(form_compiler_parameters['scalar_type'])
+
     # JIT compile UFL form into ctypes function
     module = jit_compile_forms([form], form_compiler_parameters)[0][0]
     assembly_kernel = module.create_default_cell_integral().tabulate_tensor
@@ -52,15 +55,15 @@ def assemble(dofmap, form, form_compiler_parameters={}):
         # Loop over cells
         ci = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
         cj = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
-        val = numpy.zeros(nrows*ncols*ncells, dtype=numpy.float32)
+        val = numpy.zeros(nrows*ncols*ncells, dtype=scalar_type)
         n = 0
         coords = numpy.empty((cells.shape[1], vertices.shape[1]),
                              dtype=numpy.float64)
         for c in range(ncells):
 
             # Assemble cell tensor
-            A = numpy.zeros(element_dims, dtype=numpy.float32)
-            w = numpy.array([0], dtype=numpy.float32)
+            A = numpy.zeros(element_dims, dtype=scalar_type)
+            w = numpy.array([0], dtype=scalar_type)
             for i, q in enumerate(cells[c]):
                 coords[i, :] = vertices[q]
 
@@ -81,9 +84,9 @@ def assemble(dofmap, form, form_compiler_parameters={}):
 
     @numba.jit(nopython=True)
     def _assemble_linear(assembly_kernel, cells, vertices, cell_dofs, dim):
-        ncells = cells.shape[0]
 
-        vec = numpy.zeros(dim, dtype=numpy.float32)
+        ncells = cells.shape[0]
+        vec = numpy.zeros(dim, dtype=scalar_type)
         coords = numpy.empty((cells.shape[1], vertices.shape[1]),
                              dtype=numpy.float64)
 
@@ -91,8 +94,8 @@ def assemble(dofmap, form, form_compiler_parameters={}):
         for c in range(ncells):
 
             # Assemble cell tensor
-            b = numpy.zeros(element_dims[0], dtype=numpy.float32)
-            w = numpy.array([0], dtype=numpy.float32)
+            b = numpy.zeros(element_dims[0], dtype=scalar_type)
+            w = numpy.array([0], dtype=scalar_type)
             for i, q in enumerate(cells[c]):
                 coords[i, :] = vertices[q]
             assembly_kernel(ffi.from_buffer(b),

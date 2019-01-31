@@ -77,7 +77,8 @@ t += timeit.default_timer()
 print('Assembly time a: {}'.format(t))
 
 t = -timeit.default_timer()
-b = assemble(dofmap, L, None)
+# b = assemble(dofmap, L, form_compiler_parameters)
+b = numpy.zeros(A.shape[0])
 t += timeit.default_timer()
 print('Assembly time L: {}'.format(t))
 

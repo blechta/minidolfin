@@ -3,7 +3,7 @@ jobs:
   build:
 
     docker:
-      - image: python
+      - image: python:3.7
         environment:
           MPLBACKEND: "agg"
 
@@ -28,13 +28,14 @@ jobs:
           command: |
             cd demo
             python3 helmholtz.py -d -n 4
-            python3 helmholtz.py -d -n 4 -c tsfc -f mode=spectral
-            python3 helmholtz.py -d -n 4 -c tsfc -f mode=vanilla
-            python3 helmholtz.py -d -n 4 -c tsfc -f mode=tensor
-            python3 helmholtz.py -d -n 4 -c ffc -r uflacs -f enable_preintegration=1
-            python3 helmholtz.py -d -n 4 -c ffc -r uflacs -f enable_preintegration=0
-            python3 helmholtz.py -d -n 4 -c ffc -r tsfc -f mode=vanilla
-            python3 helmholtz.py -d -n 4 -c ffc -r tsfc -f mode=spectral
+            python3 mesh_demo.py
+#            python3 helmholtz.py -d -n 4 -c tsfc -f mode=spectral
+#            python3 helmholtz.py -d -n 4 -c tsfc -f mode=vanilla
+#            python3 helmholtz.py -d -n 4 -c tsfc -f mode=tensor
+#            python3 helmholtz.py -d -n 4 -c ffc -r uflacs -f enable_preintegration=1
+#            python3 helmholtz.py -d -n 4 -c ffc -r uflacs -f enable_preintegration=0
+#            python3 helmholtz.py -d -n 4 -c ffc -r tsfc -f mode=vanilla
+#            python3 helmholtz.py -d -n 4 -c ffc -r tsfc -f mode=spectral
 
       - run:
           name: Test demo (no JIT)

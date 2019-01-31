@@ -18,4 +18,4 @@ setup(name="minidolfin",
       author_email="blechta@karlin.mff.cuni.cz",
       license="LGPL v3 or later",
       packages=["minidolfin"],
-      install_requires=["fenics-ffc", "numba", "matplotlib", "pyamg"])
+      install_requires=["fenics-ffc", "numba", "matplotlib", "pyamg", "cffi"])

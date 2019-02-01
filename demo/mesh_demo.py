@@ -16,9 +16,9 @@ mesh = read_mesh('https://raw.githubusercontent.com/chrisrichardson/meshdata/mas
 
 element = ufl.FiniteElement("P", ufl.triangle, 1)
 u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
-f = ufl.Coefficient(element)
+x = ufl.SpatialCoordinate(ufl.triangle)
 a = ufl.inner(ufl.grad(u), ufl.grad(v))*ufl.dx
-L = ufl.cos(f)*v*ufl.dx
+L = ufl.cos(x[0])*v*ufl.dx
 dofmap = build_dofmap(element, mesh)
 
 

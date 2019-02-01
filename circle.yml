@@ -11,6 +11,10 @@ jobs:
       - checkout
 
       - run:
+          name: flake8 tests
+          command: python3 -m flake8 minidolfin
+
+      - run:
           name: Install minidolfin
           command: |
             pip3 install -r requirements.txt

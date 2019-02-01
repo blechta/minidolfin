@@ -6,6 +6,7 @@ import scipy.sparse
 import numpy
 import numba
 
+
 def c_to_numpy(ctype):
     c2numpy = {'double': numpy.float64,
                'float': numpy.float32,
@@ -13,6 +14,7 @@ def c_to_numpy(ctype):
                'complex float': numpy.complex64,
                'long double': numpy.longdouble}
     return c2numpy.get(ctype)
+
 
 def jit_compile_forms(forms, params):
 
@@ -27,7 +29,8 @@ def jit_compile_forms(forms, params):
 
 def assemble(dofmap, form, form_compiler_parameters={}):
 
-    form_compiler_parameters['scalar_type'] = form_compiler_parameters.get('scalar_type', 'double')
+    form_compiler_parameters['scalar_type'] = \
+        form_compiler_parameters.get('scalar_type', 'double')
     scalar_type = c_to_numpy(form_compiler_parameters['scalar_type'])
 
     # JIT compile UFL form into ctypes function
@@ -126,9 +129,9 @@ def assemble(dofmap, form, form_compiler_parameters={}):
 def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters={}):
     """ Assemble LHS and RHS together """
 
-    form_compiler_parameters['scalar_type'] = form_compiler_parameters.get('scalar_type', 'double')
+    form_compiler_parameters['scalar_type'] = \
+        form_compiler_parameters.get('scalar_type', 'double')
     scalar_type = c_to_numpy(form_compiler_parameters['scalar_type'])
-
 
     # JIT compile UFL form into ctypes functions
     module = jit_compile_forms([LHSform, RHSform], form_compiler_parameters)

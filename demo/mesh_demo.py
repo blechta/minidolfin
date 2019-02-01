@@ -46,8 +46,8 @@ ml = pyamg.ruge_stuben_solver(A)
 print(ml)
 
 t = time.time()
-x = scipy.sparse.linalg.spsolve(A, b)
-# x = ml.solve(b, tol=1e-16)
+# x = scipy.sparse.linalg.spsolve(A, b)
+x = ml.solve(b, tol=1e-8)
 print("residual: ", numpy.linalg.norm(b-A*x))
 
 elapsed = time.time() - t

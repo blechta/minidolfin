@@ -12,7 +12,9 @@ jobs:
 
       - run:
           name: flake8 tests
-          command: python3 -m flake8 minidolfin
+          command: |
+            pip3 install flake8
+            python3 -m flake8 minidolfin
 
       - run:
           name: Install minidolfin

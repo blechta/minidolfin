@@ -35,6 +35,7 @@ jobs:
             cd demo
             python3 helmholtz.py -d -n 4
             python3 mesh_demo.py
+            python3 elasticity.py
 #            python3 helmholtz.py -d -n 4 -c tsfc -f mode=spectral
 #            python3 helmholtz.py -d -n 4 -c tsfc -f mode=vanilla
 #            python3 helmholtz.py -d -n 4 -c tsfc -f mode=tensor

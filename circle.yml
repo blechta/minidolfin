@@ -15,6 +15,8 @@ jobs:
           command: |
             wget http://gmsh.info/bin/Linux/gmsh-git-Linux64.tgz
             tar xzf gmsh-git-Linux64.tgz
+            apt-get update
+            apt-get install -y libglu1-mesa
             cp gmsh-git-Linux64/bin/gmsh /usr/local/bin
 
       - run:

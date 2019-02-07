@@ -18,9 +18,9 @@ mesh = read_mesh('tet_cube.xdmf')
 
 element = ufl.FiniteElement("P", ufl.tetrahedron, 1)
 u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
-f = ufl.Coefficient(element)
+x = ufl.SpatialCoordinate(ufl.tetrahedron)
 a = ufl.inner(ufl.grad(u), ufl.grad(v))*ufl.dx
-L = ufl.cos(f)*v*ufl.dx
+L = ufl.cos(x[1])*v*ufl.dx
 dofmap = build_dofmap(element, mesh)
 
 

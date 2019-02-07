@@ -91,6 +91,7 @@ x = ml.solve(b, residuals=res, tol=numpy.finfo(A.dtype).eps, accel='cg')
 t += timeit.default_timer()
 print('Solve time: {}'.format(t))
 
+print(res)
 plt.semilogy(res, marker='o', label='SA')
 plt.legend()
 plt.show()

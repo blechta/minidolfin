@@ -11,6 +11,13 @@ jobs:
       - checkout
 
       - run:
+          name: install gmsh
+          command: |
+            wget http://gmsh.info/bin/Linux/gmsh-git-Linux64.tgz
+            tar xzf gmsh-git-Linux64.tgz
+            cp gmsh-git-Linux64/bin/gmsh /usr/local/bin
+
+      - run:
           name: flake8 tests
           command: |
             pip3 install flake8

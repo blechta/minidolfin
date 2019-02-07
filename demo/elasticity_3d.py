@@ -69,7 +69,7 @@ B[1::3, 4] = 1
 B[2::3, 4] = -1
 B[2::3, 5] = 1
 B[0::3, 5] = -1
-# B = scipy.linalg.orth(B)
+B = scipy.linalg.orth(B)
 
 b = numpy.zeros(A.shape[0], dtype=A.dtype)
 x = numpy.zeros(A.shape[1], dtype=A.dtype)
@@ -91,7 +91,7 @@ x = ml.solve(b, residuals=res, tol=numpy.finfo(A.dtype).eps, accel='cg')
 t += timeit.default_timer()
 print('Solve time: {}'.format(t))
 
-print(res)
+print(len(res), res)
 plt.semilogy(res, marker='o', label='SA')
 plt.legend()
 plt.show()

@@ -11,6 +11,7 @@ import meshio
 import subprocess
 import timeit
 import numpy
+import scipy
 
 from minidolfin.meshing import Mesh
 from minidolfin.dofmap import build_dofmap
@@ -55,7 +56,7 @@ a = ufl.inner(sigma(u), epsilon(v))*ufl.dx
 dofmap = build_dofmap(element, mesh)
 print('Number dofs: {}'.format(dofmap.dim))
 
-scalar = 'double'
+scalar = 'float'
 
 # Coefficients are for "E", the Youngs Modulus, defined cell-wise (DG0)
 cell_data = [0.1 if idx==2 else 10.0 for idx in cell_data]
@@ -65,8 +66,6 @@ t = -timeit.default_timer()
 A = assemble(dofmap, a, {'scalar_type': scalar}, coefficients=E)
 t += timeit.default_timer()
 print('Assembly time a: {}'.format(t))
-
-print(A.max(), A.min())
 
 b = numpy.zeros(A.shape[1], dtype=A.dtype)
 
@@ -99,19 +98,21 @@ B[1::3, 4] = 1
 B[2::3, 4] = -1
 B[2::3, 5] = 1
 B[0::3, 5] = -1
-# B = scipy.linalg.orth(B)
 
 t = -timeit.default_timer()
-ml = pyamg.smoothed_aggregation_solver(A, B, max_coarse=10, strength=('symmetric', {'theta': 0.01}))
+ml = pyamg.smoothed_aggregation_solver(A, B, strength=('symmetric', {'theta': 0.001}))
 print(ml)
 
 res = []
-x = ml.solve(b, residuals=res, tol=numpy.finfo(A.dtype).eps*100, accel='gmres')
+x = ml.solve(b, residuals=res, tol=numpy.finfo(A.dtype).eps*100, accel='cg')
 # x = scipy.sparse.linalg.spsolve(A, b)
 t += timeit.default_timer()
 print('Solve time: {}'.format(t))
 
-print(res)
+print(res, len(res))
 plt.semilogy(res, marker='o', label='SA')
 plt.legend()
 plt.show()
+
+res = A*x -b
+print(res.max(), res.min())

@@ -1,3 +1,8 @@
+# minidolfin
+# Copyright (C) 2019 Chris Richardson and Jan Blechta
+#
+# SPDX-License-Identifier:    LGPL-3.0-or-later
+
 import ufl
 import ffc
 import numpy
@@ -59,7 +64,6 @@ def u_exact(x):
 element = ufl.FiniteElement("P", ufl.triangle, 3)
 u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
 a = (ufl.inner(ufl.grad(u), ufl.grad(v)) - omega2*ufl.dot(u, v))*ufl.dx
-L = 0.0001*v*ufl.dx
 
 # Build mesh
 mesh = build_unit_square_mesh(args.n, args.n)
@@ -70,21 +74,17 @@ print('Number cells: {}'.format(mesh.num_entities(tdim)))
 dofmap = build_dofmap(element, mesh)
 print('Number dofs: {}'.format(dofmap.dim))
 
+scalar = 'float'
+
 # Run and time assembly
 t = -timeit.default_timer()
-A = assemble(dofmap, a, form_compiler_parameters)
+A = assemble(dofmap, a, {'scalar_type': scalar})
 t += timeit.default_timer()
 print('Assembly time a: {}'.format(t))
 
-t = -timeit.default_timer()
-# b = assemble(dofmap, L, form_compiler_parameters)
-b = numpy.zeros(A.shape[0])
-t += timeit.default_timer()
-print('Assembly time L: {}'.format(t))
-
 # Prepare solution and rhs vectors and apply boundary conditions
 x = numpy.zeros(A.shape[1])
-# b = numpy.zeros(A.shape[0])
+b = numpy.zeros(A.shape[0])
 
 # Set Dirichlet BCs
 
@@ -99,6 +99,9 @@ print('Apply BCs: {}'.format(t))
 # Solve linear system
 t = -timeit.default_timer()
 x = scipy.sparse.linalg.spsolve(A, b)
+r = (A*x - b)
+print(r.max(), r.min())
+
 t += timeit.default_timer()
 print('Solve linear system time: {}'.format(t))
 

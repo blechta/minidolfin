@@ -117,7 +117,8 @@ def assemble(dofmap, form, form_compiler_parameters={}, coefficients=None):
     dim = len(form.arguments())
     if dim == 2:
         if coefficients is None:
-            coefficients = numpy.zeros((cells.shape[0], 1), dtype=scalar_type)
+            coefficients = numpy.zeros(cells.shape[0], dtype=scalar_type)
+        print(coefficients.shape)
         ci, cj, val = _assemble_bilinear(assembly_kernel,
                                          cells, vertices,
                                          coefficients, cell_dofs)

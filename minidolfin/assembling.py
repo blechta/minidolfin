@@ -27,7 +27,7 @@ def jit_compile_forms(forms, params):
     return compiled_forms
 
 
-def assemble(dofmap, form, form_compiler_parameters={}):
+def assemble(dofmap, form, form_compiler_parameters={}, coefficients=None):
 
     form_compiler_parameters['scalar_type'] = \
         form_compiler_parameters.get('scalar_type', 'double')
@@ -51,7 +51,8 @@ def assemble(dofmap, form, form_compiler_parameters={}):
     ffi = cffi.FFI()
 
     @numba.jit(nopython=True)
-    def _assemble_bilinear(assembly_kernel, cells, vertices, cell_dofs):
+    def _assemble_bilinear(assembly_kernel, cells, vertices,
+                           coefficients, cell_dofs):
         nrows = ncols = cell_dofs.shape[1]
         ncells = cells.shape[0]
 
@@ -66,7 +67,7 @@ def assemble(dofmap, form, form_compiler_parameters={}):
 
             # Assemble cell tensor
             A = numpy.zeros(element_dims, dtype=scalar_type)
-            w = numpy.array([0], dtype=scalar_type)
+            w = numpy.array(coefficients[c], dtype=scalar_type)
             for i, q in enumerate(cells[c]):
                 coords[i, :] = vertices[q]
 
@@ -115,8 +116,11 @@ def assemble(dofmap, form, form_compiler_parameters={}):
     # Call assembly loop
     dim = len(form.arguments())
     if dim == 2:
+        if coefficients is None:
+            coefficients = numpy.zeros((cells.shape[0], 1), dtype=scalar_type)
         ci, cj, val = _assemble_bilinear(assembly_kernel,
-                                         cells, vertices, cell_dofs)
+                                         cells, vertices,
+                                         coefficients, cell_dofs)
         mat = scipy.sparse.coo_matrix((val, (ci, cj)))
         return mat.tocsr()
     elif dim == 1:

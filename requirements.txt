@@ -5,6 +5,7 @@ numba
 cffi
 pyamg
 matplotlib
+meshio
 git+https://bitbucket.org/fenics-project/fiat.git#egg=fenics-fiat
 git+https://bitbucket.org/fenics-project/ufl.git#egg=fenics-ufl
 git+https://bitbucket.org/fenics-project/dijitso.git#egg=fenics-dijitso

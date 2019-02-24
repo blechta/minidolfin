@@ -14,7 +14,6 @@ from minidolfin.meshing import build_unit_cube_mesh
 from minidolfin.dofmap import build_dofmap
 from minidolfin.assembling import assemble
 from minidolfin.bcs import bc_apply
-from minidolfin.plot import plot
 
 
 # UFL form
@@ -48,11 +47,9 @@ print('Number cells: {}'.format(mesh.num_entities(tdim)))
 dofmap = build_dofmap(element, mesh)
 print('Number dofs: {}'.format(dofmap.dim))
 
-scalar = 'float'
-
 # Run and time assembly
 t = -timeit.default_timer()
-A = assemble(dofmap, a, {'scalar_type': scalar})
+A = assemble(dofmap, a, dtype=numpy.float32)
 t += timeit.default_timer()
 print('Assembly time a: {}'.format(t))
 
@@ -75,8 +72,9 @@ b = numpy.zeros(A.shape[0], dtype=A.dtype)
 x = numpy.zeros(A.shape[1], dtype=A.dtype)
 
 # Set some BCs - fix bottom edge, and move top corner
-bc_dofs = list(range((n + 1) * (n+1) * 3)) + [len(b) - 3, len(b) - 2, len(b) - 1]
-bc_vals = numpy.zeros_like(bc_dofs, dtype=float)
+bc_dofs = list(range((n + 1) * (n + 1) * 3)) \
+          + [len(b) - 3, len(b) - 2, len(b) - 1]
+bc_vals = numpy.zeros_like(bc_dofs, dtype=A.dtype)
 bc_vals[-2] = 0.01
 
 bc_apply(bc_dofs, bc_vals, A, b)

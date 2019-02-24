@@ -3,7 +3,7 @@ import numpy
 import scipy.sparse
 
 
-def build_dirichlet_dofs(dofmap, value):
+def build_dirichlet_dofs(dofmap, value, dtype=numpy.double):
 
     # Fetch mesh data
     tdim = dofmap.mesh.reference_cell.get_dimension()
@@ -48,7 +48,7 @@ def build_dirichlet_dofs(dofmap, value):
     def interpolation_operator(f):
         return numpy.fromiter(
             (phi(f) for phi in fiat_element.get_dual_set().get_nodes()),
-            numpy.double, count=dim)
+            dtype=dtype, count=dim)
 
     # Temporary
     bc_map = {}
@@ -84,7 +84,7 @@ def build_dirichlet_dofs(dofmap, value):
     # Convert to arrays
     # FIXME: Is deterministic?
     dofs = numpy.fromiter(bc_map.keys(), numpy.int32, count=len(bc_map))
-    vals = numpy.fromiter(bc_map.values(), numpy.double, count=len(bc_map))
+    vals = numpy.fromiter(bc_map.values(), dtype, count=len(bc_map))
 
     return dofs, vals
 

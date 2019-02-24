@@ -21,7 +21,7 @@ from minidolfin.plot import plot
 element = ufl.VectorElement("P", ufl.triangle, 1)
 u, v = ufl.TrialFunction(element), ufl.TestFunction(element)
 
-E = 1.0e9
+E = 10.0
 nu = 0.25
 mu = E / (2.0 * (1.0 + nu))
 lmbda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
@@ -48,30 +48,33 @@ print('Number cells: {}'.format(mesh.num_entities(tdim)))
 dofmap = build_dofmap(element, mesh)
 print('Number dofs: {}'.format(dofmap.dim))
 
-scalar = 'float'
-
 # Run and time assembly
 t = -timeit.default_timer()
-A = assemble(dofmap, a, {'scalar_type': scalar})
+A = assemble(dofmap, a, dtype=numpy.float64)
 t += timeit.default_timer()
 print('Assembly time a: {}'.format(t))
 
-b = numpy.zeros(A.shape[0])
-x = numpy.zeros(A.shape[1])
+b = numpy.zeros(A.shape[0], dtype=A.dtype)
+x = numpy.zeros_like(b)
 
 # Set some BCs - fix bottom edge, and move top corner
 bc_dofs = list(range(n * 2 + 2)) + [len(b) - 2, len(b) - 1]
-bc_vals = numpy.zeros_like(bc_dofs, dtype=float)
-bc_vals[-1] = 0.01
+bc_vals = numpy.zeros_like(bc_dofs, dtype=A.dtype)
+bc_vals[-2] = 0.01
 
 bc_apply(bc_dofs, bc_vals, A, b)
 
+print('bnorm = ', numpy.linalg.norm(b))
+print('Anorm = ', scipy.sparse.linalg.norm(A))
+
 t = -timeit.default_timer()
+
 x = scipy.sparse.linalg.spsolve(A, b)
 t += timeit.default_timer()
 print('Solve time: {}'.format(t))
 
-res = b - A*x
+res = b - A * x
+print(len(res), len(b), len(x))
 print("residual: ", numpy.linalg.norm(res), res.max(), res.min())
 
 # Plotting...
@@ -85,5 +88,3 @@ xmag = numpy.sqrt(x[:, 0]**2 + x[:, 1]**2)
 
 plot(mesh, xmag)
 plt.show()
-
-print(x)

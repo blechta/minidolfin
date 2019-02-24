@@ -13,17 +13,18 @@ jobs:
       - run:
           name: install gmsh
           command: |
-            wget http://gmsh.info/bin/Linux/gmsh-git-Linux64.tgz
-            tar xzf gmsh-git-Linux64.tgz
+            wget http://gmsh.info/bin/Linux/gmsh-4.1.5-Linux64.tgz
+            tar xzf gmsh-4.1.5-Linux64.tgz
             apt-get update
             apt-get install -y libglu1-mesa
-            cp gmsh-git-Linux64/bin/gmsh /usr/local/bin
+            cp gmsh-4.1.5-Linux64/bin/gmsh /usr/local/bin
 
       - run:
           name: flake8 tests
           command: |
             pip3 install flake8
             python3 -m flake8 minidolfin
+            python3 -m flake8 demo
 
       - run:
           name: Install minidolfin
@@ -43,13 +44,10 @@ jobs:
           command: |
             cd demo
             python3 helmholtz.py -d -n 4
+            python3 helmholtz-complex.py
             python3 mesh_demo.py
+            python3 mesh_demo_3d.py
             python3 elasticity.py
+            python3 elasticity_3d.py
             python3 gmsh_demo.py
-#            python3 helmholtz.py -d -n 4 -c tsfc -f mode=spectral
-#            python3 helmholtz.py -d -n 4 -c tsfc -f mode=vanilla
-#            python3 helmholtz.py -d -n 4 -c tsfc -f mode=tensor
-#            python3 helmholtz.py -d -n 4 -c ffc -r uflacs -f enable_preintegration=1
-#            python3 helmholtz.py -d -n 4 -c ffc -r uflacs -f enable_preintegration=0
-#            python3 helmholtz.py -d -n 4 -c ffc -r tsfc -f mode=vanilla
-#            python3 helmholtz.py -d -n 4 -c ffc -r tsfc -f mode=spectral
+            python3 curl-curl-cavity.py

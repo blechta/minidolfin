@@ -106,7 +106,7 @@ def interpolate_vertex_values(dofmap, x):
     vertex_dofs = [dofs[k] for entity, dofs in sorted(vertex_dofs.items())]
 
     # Build vertex values
-    vertex_values = numpy.ndarray((num_vertices,), dtype=numpy.double)
+    vertex_values = numpy.ndarray((num_vertices,), dtype=x.dtype)
     vertex_values[cell_vertex_conn[:]] = \
         x[numpy.ascontiguousarray(cell_dofs[:, vertex_dofs])]
 

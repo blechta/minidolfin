@@ -17,5 +17,6 @@ setup(name="minidolfin",
       author="Jan Blechta",
       author_email="blechta@karlin.mff.cuni.cz",
       license="LGPL v3 or later",
+      zip_safe=False,
       packages=["minidolfin"],
-      install_requires=["fenics-ffc", "numba", "matplotlib", "cffi", "requests"])
+      install_requires=["fenics-ffc", "numba", "matplotlib", "cffi", "requests", "meshio"])

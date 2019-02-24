@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 import FIAT
 import numpy
 import numba
+import meshio
 
 
 class Mesh(object):
@@ -155,6 +156,46 @@ def build_unit_square_mesh(nx, ny):
     fiat_cell = FIAT.reference_element.ufc_cell("triangle")
 
     return Mesh(fiat_cell, vertices, cells)
+
+
+def read_meshio(filename):
+    """ Read a mesh with meshio """
+
+    mesh = meshio.read(filename)
+    if 'tetra' in mesh.cells.keys():
+        fiat_cell = FIAT.reference_element.ufc_cell("tetrahedron")
+        cell_data = mesh.cell_data.get('tetra', {})
+        cells = mesh.cells['tetra']
+        points = mesh.points
+    elif 'triangle' in mesh.cells.keys():
+        fiat_cell = FIAT.reference_element.ufc_cell("triangle")
+        cell_data = mesh.cell_data.get('triangle', {})
+        cells = mesh.cells['triangle']
+        points = mesh.points
+
+    # Convert to minidolfin Mesh
+    cells.sort(axis=1)
+
+    mesh = Mesh(fiat_cell, points, cells)
+    mesh.data = cell_data
+    return mesh
+
+
+def write_meshio(filename, mesh, values=None):
+    """ Write a mesh with meshio (possibly with point data)"""
+
+    if (mesh.reference_cell.shape == FIAT.reference_element.TETRAHEDRON):
+        cells = {'tetra': mesh.topology[(3, 0)]}
+    elif (mesh.reference_cell.shape == FIAT.reference_element.TRIANGLE):
+        cells = {'triangle': mesh.topology[(2, 0)]}
+    else:
+        raise RuntimeError("Unknown cell type: ", mesh.reference_cell)
+
+    mesh = meshio.mesh.Mesh(mesh.vertices, cells)
+    if values is not None:
+        mesh.point_data = {'u': values}
+
+    meshio.write(filename=filename, mesh=mesh)
 
 
 def read_mesh(url):

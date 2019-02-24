@@ -49,10 +49,12 @@ print(z.value)
 # Examples 2: execute function from Numba
 sizeof_double = ctypes.sizeof(ctypes.c_double)
 
+
 @numba.jit(nopython=True)
 def vecsq(a):
     for i in range(a.size):
         sq(a.ctypes.data + i*sizeof_double)
+
 
 v = numpy.arange(1024, dtype=numpy.double)
 vecsq(v)

@@ -1,24 +1,41 @@
 
 import ffc
-import ffc.codegeneration.jit
+from ffc.codegeneration import jit as ffc_jit
 import cffi
 import scipy.sparse
 import numpy
 import numba
+import numba.cffi_support
+
+# Register C complex types
+ffi = cffi.FFI()
+numba.cffi_support.register_type(ffi.typeof('double _Complex'),
+                                 numba.types.complex128)
+numba.cffi_support.register_type(ffi.typeof('float _Complex'),
+                                 numba.types.complex64)
 
 
 def c_to_numpy(ctype):
     c2numpy = {'double': numpy.float64,
                'float': numpy.float32,
-               'complex double': numpy.complex128,
-               'complex float': numpy.complex64,
+               'double complex': numpy.complex128,
+               'float complex': numpy.complex64,
                'long double': numpy.longdouble}
     return c2numpy.get(ctype)
 
 
+def numpy_to_c(dtype):
+    numpy2c = {numpy.float64: 'double',
+               numpy.float32: 'float',
+               numpy.complex128: 'double complex',
+               numpy.complex64: 'float complex',
+               numpy.longdouble: 'long double'}
+    return numpy2c[dtype]
+
+
 def jit_compile_forms(forms, params):
 
-    compiled_forms, module = ffc.codegeneration.jit.compile_forms(
+    compiled_forms, module = ffc_jit.compile_forms(
         forms, parameters=params)
 
     for f, compiled_f in zip(forms, compiled_forms):
@@ -27,15 +44,23 @@ def jit_compile_forms(forms, params):
     return compiled_forms
 
 
-def assemble(dofmap, form, form_compiler_parameters={}, coefficients=None):
+def assemble(dofmap, form, dtype=numpy.double,
+             form_compiler_parameters={}):
 
-    form_compiler_parameters['scalar_type'] = \
-        form_compiler_parameters.get('scalar_type', 'double')
-    scalar_type = c_to_numpy(form_compiler_parameters['scalar_type'])
+    if isinstance(dtype, numpy.dtype):
+        dtype = dtype.type
+
+    # Overwrite with given dtype
+    form_compiler_parameters['scalar_type'] = numpy_to_c(dtype)
 
     # JIT compile UFL form into ctypes function
     module = jit_compile_forms([form], form_compiler_parameters)[0][0]
-    assembly_kernel = module.create_default_cell_integral().tabulate_tensor
+    dim = len(form.arguments())
+    nc = module.num_coefficients
+    for i in range(nc):
+        print(i, module.original_coefficient_position(i))
+    assembly_kernel = module.create_default_cell_integral()
+    assembly_kernel = assembly_kernel.tabulate_tensor
 
     # Fetch data
     tdim = dofmap.mesh.reference_cell.get_dimension()
@@ -50,93 +75,96 @@ def assemble(dofmap, form, form_compiler_parameters={}, coefficients=None):
 
     ffi = cffi.FFI()
 
-    @numba.jit(nopython=True)
-    def _assemble_bilinear(assembly_kernel, cells, vertices,
-                           coefficients, cell_dofs):
-        nrows = ncols = cell_dofs.shape[1]
-        ncells = cells.shape[0]
-
-        # Loop over cells
-        ci = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
-        cj = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
-        val = numpy.zeros(nrows*ncols*ncells, dtype=scalar_type)
-        n = 0
-        coords = numpy.empty((cells.shape[1], vertices.shape[1]),
-                             dtype=numpy.float64)
-        for c in range(ncells):
-
-            # Assemble cell tensor
-            A = numpy.zeros(element_dims, dtype=scalar_type)
-            w = numpy.array(coefficients[c], dtype=scalar_type)
-            for i, q in enumerate(cells[c]):
-                coords[i, :] = vertices[q]
-
-            assembly_kernel(ffi.from_buffer(A),
-                            ffi.from_buffer(w),
-                            ffi.from_buffer(coords), 0)
-
-            # Add to global tensor
-            rows = cols = cell_dofs[c]
-            for i, ig in enumerate(rows):
-                for j, jg in enumerate(cols):
-                    ci[n] = ig
-                    cj[n] = jg
-                    val[n] = A[i, j]
-                    n += 1
-
-        return ci, cj, val
-
-    @numba.jit(nopython=True)
-    def _assemble_linear(assembly_kernel, cells, vertices, cell_dofs, dim):
+    @numba.jit(nopython=True, cache=False)
+    def _assemble_bilinear(coefficients, val):
 
         ncells = cells.shape[0]
-        vec = numpy.zeros(dim, dtype=scalar_type)
+        local_size = len(val) // ncells
+        coeff_size = len(coefficients) // ncells
+
+        # Preallocate output buffer, and temporary for coords
+
         coords = numpy.empty((cells.shape[1], vertices.shape[1]),
                              dtype=numpy.float64)
+        caddr = ffi.from_buffer(coords)
+        for i in range(ncells):
+
+            # Get cell coordinates
+            for j, q in enumerate(cells[i]):
+                coords[j, :] = vertices[q]
+
+            # Assemble cell tensor into buffer
+            assembly_kernel(ffi.from_buffer(val[i * local_size:]),
+                            ffi.from_buffer(coefficients
+                                            [i * coeff_size:]),
+                            caddr, 0)
+
+    @numba.jit(nopython=True, cache=False)
+    def _assemble_linear(coefficients, vec):
+
+        ncells = cells.shape[0]
+        num_coeffs = len(coefficients) // ncells
+
+        # Temporaries
+        b = numpy.empty(element_dims[0], dtype=dtype)
+        baddr = ffi.from_buffer(b)
+        coords = numpy.empty((cells.shape[1], vertices.shape[1]),
+                             dtype=numpy.float64)
+        caddr = ffi.from_buffer(coords)
 
         # Loop over cells
-        for c in range(ncells):
+        for i in range(ncells):
 
-            # Assemble cell tensor
-            b = numpy.zeros(element_dims[0], dtype=scalar_type)
-            w = numpy.array([0], dtype=scalar_type)
-            for i, q in enumerate(cells[c]):
-                coords[i, :] = vertices[q]
-            assembly_kernel(ffi.from_buffer(b),
-                            ffi.from_buffer(w),
-                            ffi.from_buffer(coords), 0)
+            b.fill(0)
+            # Get cell coordinates
+            for j, q in enumerate(cells[i]):
+                coords[j, :] = vertices[q]
+
+            # Assemble into temporary
+            assembly_kernel(baddr,
+                            ffi.from_buffer(coefficients
+                                            [i * num_coeffs:]),
+                            caddr, 0)
 
             # Add to global tensor
-            rows = cell_dofs[c]
-            for i, ig in enumerate(rows):
+            for i, ig in enumerate(cell_dofs[i]):
                 vec[ig] += b[i]
 
-        return vec
+    if 'coefficients' in form._cache.keys():
+        coefficients = form._cache['coefficients']
+    else:
+        coefficients = numpy.empty(0, dtype=dtype)
 
-    # Call assembly loop
-    dim = len(form.arguments())
+    if len(coefficients.shape) == 2:
+        coefficients = coefficients.resize(coefficients.shape[0]
+                                           * coefficients.shape[1])
+
     if dim == 2:
-        if coefficients is None:
-            coefficients = numpy.zeros(cells.shape[0], dtype=scalar_type)
-        print(coefficients.shape)
-        ci, cj, val = _assemble_bilinear(assembly_kernel,
-                                         cells, vertices,
-                                         coefficients, cell_dofs)
-        mat = scipy.sparse.coo_matrix((val, (ci, cj)))
+        # Form global insertion indices for all cells
+        cij = (numpy.repeat(cell_dofs, cell_dofs.shape[1]),
+               numpy.tile(cell_dofs, cell_dofs.shape[1]).flatten())
+
+        # Fill local tensors
+        nrows = ncols = cell_dofs.shape[1]
+        val = numpy.zeros(nrows * ncols * cells.shape[0], dtype=dtype)
+        _assemble_bilinear(coefficients, val)
+
+        mat = scipy.sparse.coo_matrix((val, cij))
+        mat.eliminate_zeros()
         return mat.tocsr()
     elif dim == 1:
-        vec = _assemble_linear(assembly_kernel,
-                               cells, vertices, cell_dofs, dofmap.dim)
+        vec = numpy.zeros(dofmap.dim, dtype=dtype)
+        _assemble_linear(coefficients, vec)
         return vec
+
     raise RuntimeError("Form is neither linear nor bilinear.")
 
 
-def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters={}):
+def symass(dofmap, LHSform, RHSform, bc_map, dtype=numpy.float64,
+           form_compiler_parameters={}):
     """ Assemble LHS and RHS together """
 
-    form_compiler_parameters['scalar_type'] = \
-        form_compiler_parameters.get('scalar_type', 'double')
-    scalar_type = c_to_numpy(form_compiler_parameters['scalar_type'])
+    form_compiler_parameters['scalar_type'] = numpy_to_c(dtype)
 
     # JIT compile UFL form into ctypes functions
     module = jit_compile_forms([LHSform, RHSform], form_compiler_parameters)
@@ -161,14 +189,14 @@ def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters={}):
         dim = bcs.shape[0]
         LHS_kernel, RHS_kernel = kernels
         nrows = ncols = cell_dofs.shape[1]
+        nval = nrows*ncols
         ncells = cells.shape[0]
 
         # Storage for Vector.
-        vec = numpy.zeros(dim, dtype=scalar_type)
+        vec = numpy.zeros(dim, dtype=dtype)
+
         # Storage for COO Matrix
-        ci = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
-        cj = numpy.zeros(nrows*ncols*ncells, dtype=numpy.int32)
-        val = numpy.zeros(nrows*ncols*ncells, dtype=scalar_type)
+        val = numpy.zeros(nval*ncells, dtype=dtype)
 
         n = 0
         # Temporary for cell geometry
@@ -177,10 +205,10 @@ def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters={}):
         for c in range(ncells):
 
             # Assemble cell vector and matrix
-            b = numpy.zeros(element_dims[0], dtype=scalar_type)
-            A = numpy.zeros(element_dims, dtype=scalar_type)
-            wA = numpy.array([0], dtype=scalar_type)
-            wb = numpy.array([0], dtype=scalar_type)
+            b = numpy.zeros(element_dims[0], dtype=dtype)
+            A = numpy.zeros(element_dims, dtype=dtype)
+            wA = numpy.array([0], dtype=dtype)
+            wb = numpy.array([0], dtype=dtype)
             for i, q in enumerate(cells[c]):
                 coords[i, :] = vertices[q]
 
@@ -192,7 +220,7 @@ def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters={}):
                        ffi.from_buffer(wb),
                        ffi.from_buffer(coords), 0)
 
-            rows = cols = cell_dofs[c]
+            rows = cell_dofs[c]
 
             # Set Dirichlet BCs symmetrically
             for i, iglobal in enumerate(rows):
@@ -206,25 +234,28 @@ def symass(dofmap, LHSform, RHSform, bc_map, form_compiler_parameters={}):
             # Add to global vector and matrix
             for i, iglobal in enumerate(rows):
                 vec[iglobal] += b[i]
-                for j, jglobal in enumerate(cols):
-                    ci[n] = iglobal
-                    cj[n] = jglobal
+                for j in range(ncols):
                     val[n] = A[i, j]
                     n += 1
 
-        return ci, cj, val, vec
+        return val, vec
 
     # Mark any dofs which have BCs. FIXME: better way?
     bcs = numpy.zeros(dofmap.dim, dtype=bool)
-    bcvals = numpy.zeros(dofmap.dim, dtype=scalar_type)
+    bcvals = numpy.zeros(dofmap.dim, dtype=dtype)
     for dof, val in bc_map.items():
         bcs[dof] = True
         bcvals[dof] = val
 
-    # Call assembly loop
-    ci, cj, val, vec = _assemble((LHS_kernel, RHS_kernel),
-                                 cells, vertices,
-                                 cell_dofs, bcs, bcvals)
+    # Form global insertion indices for all cells
+    cij = (numpy.repeat(cell_dofs, cell_dofs.shape[1]),
+           numpy.tile(cell_dofs, cell_dofs.shape[1]).flatten())
 
-    mat = scipy.sparse.coo_matrix((val, (ci, cj)))
+    # Call assembly loop
+    val, vec = _assemble((LHS_kernel, RHS_kernel),
+                         cells, vertices,
+                         cell_dofs, bcs, bcvals)
+
+    mat = scipy.sparse.coo_matrix((val, cij))
+    mat.eliminate_zeros()
     return mat.tocsr(), vec

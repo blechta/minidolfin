@@ -9,7 +9,7 @@ import ufl
 import numpy
 import matplotlib.pyplot as plt
 
-from minidolfin.meshing import read_mesh
+from minidolfin.meshing import read_mesh, write_meshio
 from minidolfin.dofmap import build_dofmap, interpolate_vertex_values
 from minidolfin.assembling import symass
 from minidolfin.bcs import build_dirichlet_dofs
@@ -30,13 +30,13 @@ def u_bound(x):
 
 
 t = time.time()
-bc_dofs, bc_vals = build_dirichlet_dofs(dofmap, u_bound)
+bc_dofs, bc_vals = build_dirichlet_dofs(dofmap, u_bound, dtype=numpy.float64)
 bc_map = {i: v for i, v in zip(bc_dofs, bc_vals)}
 elapsed = time.time() - t
 print('BC time = ', elapsed)
 
 t = time.time()
-A, b = symass(dofmap, a, L, bc_map, {'scalar_type': 'double'})
+A, b = symass(dofmap, a, L, bc_map, dtype=numpy.float64)
 
 elapsed = time.time() - t
 print('Ass time = ', elapsed)
@@ -63,9 +63,20 @@ print("****** Ruge Stuben solver ******")
 ml = pyamg.ruge_stuben_solver(A, max_coarse=100)
 print(ml)
 
+n = 0
+
+
+def residual(w):
+    global n
+    res = A*w - b
+    write_meshio('file%d.xdmf' % n, mesh, res)
+    n += 1
+    print(numpy.linalg.norm(res))
+
+
 t = time.time()
 res = []
-x = ml.solve(b, residuals=res, tol=1e-12, accel='cg')
+x = ml.solve(b, residuals=res, tol=1e-12, accel='cg', callback=residual)
 
 print(res)
 print("residual: ", numpy.linalg.norm(b - A * x))

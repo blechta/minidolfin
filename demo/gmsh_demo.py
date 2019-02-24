@@ -6,31 +6,21 @@
 import matplotlib.pyplot as plt
 import pyamg
 import ufl
-import FIAT
-import meshio
 import subprocess
 import timeit
 import numpy
 import scipy
 
-from minidolfin.meshing import Mesh
+from minidolfin.meshing import read_meshio, write_meshio
 from minidolfin.dofmap import build_dofmap
-from minidolfin.assembling import assemble, c_to_numpy
+from minidolfin.assembling import assemble
 from minidolfin.bcs import bc_apply
 
 # Call gmsh
 subprocess.call(['gmsh', '-3', 'cylinder.geo'])
 
 # Read gmsh format
-mesh = meshio.read('cylinder.msh')
-cell_data = mesh.cell_data['tetra']['gmsh:physical']
-cells = mesh.cells['tetra']
-points = mesh.points
-
-# Convert to minidolfin Mesh
-cells.sort(axis=1)
-fiat_cell = FIAT.reference_element.ufc_cell("tetrahedron")
-mesh = Mesh(fiat_cell, points, cells)
+mesh = read_meshio('cylinder.msh')
 
 element = ufl.VectorElement("P", ufl.tetrahedron, 1)
 DG0 = ufl.FiniteElement("DG", ufl.tetrahedron, 0)
@@ -50,20 +40,26 @@ def sigma(v):
     return 2.0*mu*epsilon(v) + lmbda*ufl.tr(epsilon(v)) \
         * ufl.Identity(v.geometric_dimension())
 
+
 a = ufl.inner(sigma(u), epsilon(v))*ufl.dx
 
 # Build dofmap
 dofmap = build_dofmap(element, mesh)
 print('Number dofs: {}'.format(dofmap.dim))
 
-scalar = 'float'
+scalar_type = numpy.float64
 
 # Coefficients are for "E", the Youngs Modulus, defined cell-wise (DG0)
-cell_data = [0.1 if idx==2 else 10.0 for idx in cell_data]
-E = numpy.array(cell_data, dtype=c_to_numpy(scalar))
+cell_data = [1.0 if idx == 2 else 10.0 for idx in mesh.data['gmsh:physical']]
+E = numpy.array(cell_data, dtype=scalar_type)
 
 t = -timeit.default_timer()
-A = assemble(dofmap, a, {'scalar_type': scalar}, coefficients=E)
+
+# Patch in coeff values
+print(a.coefficient_numbering())
+a._cache['coefficients'] = E
+
+A = assemble(dofmap, a, dtype=scalar_type)
 t += timeit.default_timer()
 print('Assembly time a: {}'.format(t))
 
@@ -77,13 +73,17 @@ for i, x in enumerate(mesh.vertices):
         idx = i * 3
         dofs.append(idx)
         vals.append(0.0)
+        dofs.append(idx + 1)
+        vals.append(0.0)
+        dofs.append(idx + 2)
+        vals.append(0.0)
 
     if (x[0] == 0.0):
-        idx = i * 3
+        idx = i * 3 + 1
         dofs.append(idx)
         vals.append(0.1)
 
-bc_apply(dofs, vals, A, b)
+bc_apply(dofs, numpy.array(vals, dtype=A.dtype), A, b)
 
 # Null space
 B = numpy.zeros((A.shape[0], 6), dtype=A.dtype)
@@ -98,21 +98,24 @@ B[1::3, 4] = 1
 B[2::3, 4] = -1
 B[2::3, 5] = 1
 B[0::3, 5] = -1
+B = scipy.linalg.orth(B)
 
 t = -timeit.default_timer()
-ml = pyamg.smoothed_aggregation_solver(A, B, strength=('symmetric', {'theta': 0.001}))
-print(ml)
+ml = pyamg.smoothed_aggregation_solver(A, B)
 
 res = []
-x = ml.solve(b, residuals=res, tol=numpy.finfo(A.dtype).eps*100, accel='cg')
+x = ml.solve(b, residuals=res,
+             tol=numpy.finfo(A.dtype).eps, accel='gmres')
 # x = scipy.sparse.linalg.spsolve(A, b)
 t += timeit.default_timer()
 print('Solve time: {}'.format(t))
 
 print(res, len(res))
-plt.semilogy(res, marker='o', label='SA')
+plt.semilogy(res, marker='o', label='residual')
 plt.legend()
 plt.show()
 
-res = A*x -b
+res = A * x - b
 print(res.max(), res.min())
+
+write_meshio('out.xdmf', mesh, x)

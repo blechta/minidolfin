@@ -1,9 +1,11 @@
-
 import xml.etree.ElementTree as ET
 import FIAT
 import numpy
 import numba
 import meshio
+
+from pkg_resources import parse_version
+from functools import partial
 
 
 class Mesh(object):
@@ -62,22 +64,7 @@ class Mesh(object):
             .reshape(ent_per_cell*num_cells, vertices_per_ent)
 
         # Gather cells togeter, pick unique, that gives ent-numbering
-        tmp = {}
-        for ent_ind, ent_verts in enumerate(ent_vert_conn):
-            tmp.setdefault(tuple(ent_verts), []).append(ent_ind)
-        cell_ent_conn = numpy.ndarray((ent_vert_conn.shape[0],),
-                                      dtype=ent_vert_conn.dtype)
-        ent_vert_conn = numpy.ndarray((len(tmp), ent_vert_conn.shape[1]),
-                                      dtype=ent_vert_conn.dtype)
-        cnt = 0
-        for ent_verts, ent_inds in tmp.items():
-            ent_vert_conn[cnt] = ent_verts
-            cell_ent_conn[ent_inds] = cnt
-            cnt += 1
-        del tmp
-        # NB: With NumPy >= 1.13 just maybe:
-        # ent_vert_conn, cell_ent_conn = numpy.unique(ent_vert_conn,
-        #                                    axis=0, return_inverse=True)
+        ent_vert_conn, cell_ent_conn = _unique_axis_0_inverse(ent_vert_conn)
 
         # Adapt data into desired shape
         cell_ent_conn = cell_ent_conn.reshape(num_cells, ent_per_cell)
@@ -263,3 +250,25 @@ def read_mesh(url):
     mesh.data = data_all
 
     return mesh
+
+
+if parse_version(numpy.__version__) >= parse_version('1.13'):
+    _unique_axis_0_inverse = partial(numpy.unique, axis=0, return_inverse=True)
+else:
+    def _unique_axis_0_inverse(arr):
+        """Replacement for `numpy.unique(arr, axis=0, return_inverse=True)`"""
+        assert arr.ndim == 2
+
+        # Construct inverse mapping as dict
+        inverse = {}
+        for i, row in enumerate(arr):
+            inverse.setdefault(tuple(row), []).append(i)
+
+        # Populate arrays
+        unique = numpy.ndarray((len(inverse), arr.shape[1]), dtype=arr.dtype)
+        unique_inverse = numpy.ndarray((arr.shape[0],), dtype=arr.dtype)
+        for k, (row, I) in enumerate(inverse.items()):
+            unique[k] = row
+            unique_inverse[I] = k
+
+        return unique, unique_inverse

@@ -1,3 +1,7 @@
+# minidolfin
+# Copyright (C) 2019 Chris Richardson and Jan Blechta
+#
+# SPDX-License-Identifier:    LGPL-3.0-or-later
 
 import ffc
 from ffc.codegeneration import jit as ffc_jit
@@ -130,14 +134,14 @@ def assemble(dofmap, form, dtype=numpy.double,
             for i, ig in enumerate(cell_dofs[i]):
                 vec[ig] += b[i]
 
-    if 'coefficients' in form._cache.keys():
-        coefficients = form._cache['coefficients']
-    else:
+    coefficients = form.coefficients()
+    if len(coefficients) == 0:
         coefficients = numpy.empty(0, dtype=dtype)
+    else:
+        coefficients = numpy.hstack([w._values for w in coefficients])
 
     if len(coefficients.shape) == 2:
-        coefficients = coefficients.resize(coefficients.shape[0]
-                                           * coefficients.shape[1])
+        coefficients.resize(coefficients.shape[0] * coefficients.shape[1])
 
     if dim == 2:
         # Form global insertion indices for all cells
@@ -255,6 +259,16 @@ def symass(dofmap, LHSform, RHSform, bc_map, dtype=numpy.float64,
     val, vec = _assemble((LHS_kernel, RHS_kernel),
                          cells, vertices,
                          cell_dofs, bcs, bcvals)
+
+    A = val.reshape(cell_dofs.shape[0], cell_dofs.shape[1],
+                    cell_dofs.shape[1])
+
+    for i in range(cell_dofs.shape[0]):
+        for j in range(cell_dofs.shape[1]):
+            if cell_dofs[i, j] in bc_map.keys():
+                A[i, j, :] = 0.0
+                A[i, :, j] = 0.0
+                A[i, j, j] = 1.0
 
     mat = scipy.sparse.coo_matrix((val, cij))
     mat.eliminate_zeros()

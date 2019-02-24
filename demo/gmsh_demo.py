@@ -15,6 +15,7 @@ from minidolfin.meshing import read_meshio, write_meshio
 from minidolfin.dofmap import build_dofmap
 from minidolfin.assembling import assemble
 from minidolfin.bcs import bc_apply
+from minidolfin.coefficients import attach_coefficient_values
 
 # Call gmsh
 subprocess.call(['gmsh', '-3', 'cylinder.geo'])
@@ -51,13 +52,10 @@ scalar_type = numpy.float64
 
 # Coefficients are for "E", the Youngs Modulus, defined cell-wise (DG0)
 cell_data = [1.0 if idx == 2 else 10.0 for idx in mesh.data['gmsh:physical']]
-E = numpy.array(cell_data, dtype=scalar_type)
+attach_coefficient_values(E, numpy.array(cell_data, dtype=scalar_type)
+                          .reshape(len(cell_data), 1))
 
 t = -timeit.default_timer()
-
-# Patch in coeff values
-print(a.coefficient_numbering())
-a._cache['coefficients'] = E
 
 A = assemble(dofmap, a, dtype=scalar_type)
 t += timeit.default_timer()

@@ -59,7 +59,7 @@ def assemble(dofmap, form, dtype=numpy.double,
     nc = module.num_coefficients
     for i in range(nc):
         print(i, module.original_coefficient_position(i))
-    assembly_kernel = module.create_default_cell_integral()
+    assembly_kernel = module.create_cell_integral(-1)
     assembly_kernel = assembly_kernel.tabulate_tensor
 
     # Fetch data
@@ -168,8 +168,8 @@ def symass(dofmap, LHSform, RHSform, bc_map, dtype=numpy.float64,
 
     # JIT compile UFL form into ctypes functions
     module = jit_compile_forms([LHSform, RHSform], form_compiler_parameters)
-    LHS_kernel = module[0][0].create_default_cell_integral().tabulate_tensor
-    RHS_kernel = module[1][0].create_default_cell_integral().tabulate_tensor
+    LHS_kernel = module[0][0].create_cell_integral(-1).tabulate_tensor
+    RHS_kernel = module[1][0].create_cell_integral(-1).tabulate_tensor
 
     # Fetch data
     tdim = dofmap.mesh.reference_cell.get_dimension()
